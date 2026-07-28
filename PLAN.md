@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 11 code verified; live Notion and Cron setup in progress
+**Status:** Phase 11 complete and verified; Phase 10 remains planned and unapproved
 
 ## Product contract
 
@@ -720,9 +720,9 @@ Security threat model:
 
 Implementation:
 
-- [ ] Connect Notion and create a private `Sidebet Matched Bets Archive`
+- [x] Connect Notion and create a private `Sidebet Matched Bets Archive`
   database with the locked property schema.
-- [ ] Create a least-privilege Notion internal connection, share only the
+- [x] Create a least-privilege Notion internal connection, share only the
   archive database with it, and configure its token through Sites runtime
   secrets.
 - [x] Add failing unit and route tests for canonical export payloads, omission
@@ -752,12 +752,12 @@ Implementation:
 - [x] Run unit tests, rendered-output tests, lint, strict type checking,
   migration generation, the production build, and local scheduled-handler
   simulation.
-- [ ] Configure the Sites secrets and Notion data-source ID without exposing
+- [x] Configure the Sites secrets and Notion data-source ID without exposing
   their values, deploy the verified app version, and perform an initial full
   backfill.
-- [ ] Re-run the export and verify every D1 bet ID has exactly one Notion
+- [x] Re-run the export and verify every D1 bet ID has exactly one Notion
   record and the second run reports only unchanged records.
-- [ ] Deploy the Cron Worker to the owner's Cloudflare account, verify the
+- [x] Deploy the Cron Worker to the owner's Cloudflare account, verify the
   weekly trigger is registered, manually test one invocation, and confirm its
   run appears in both Cloudflare logs and `notion_export_runs`.
 - [x] Update `README.md` and `CONTRIBUTING.md` to distinguish the Notion
