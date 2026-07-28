@@ -11,17 +11,31 @@ import type {
   AppAction,
   AppState,
   CounterofferView,
+  MarketStatus,
   MarketView,
   OfferView,
   PairBalanceView,
   Selection,
 } from "@/lib/contracts";
 import { americanOdds } from "@/lib/domain";
+import {
+  filterAndSortMarkets,
+  type MarketLedgerFilter,
+} from "@/lib/market-ledger";
 
 type Tab = "board" | "bets" | "settle" | "markets";
 
 const MAX_PARLAY_LEGS = 8;
 const MARKET_BATCH_SIZE = 8;
+const MARKET_STATUS_FILTERS: {
+  value: MarketLedgerFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All" },
+  { value: "open", label: "Open" },
+  { value: "resolved", label: "Resolved" },
+  { value: "void", label: "Voided" },
+];
 
 export function BettingApp({
   viewer,
@@ -1133,6 +1147,29 @@ function MarketsTab({
   const [selectionA, setSelectionA] = useState("Yes");
   const [selectionB, setSelectionB] = useState("No");
   const [closesAt, setClosesAt] = useState(defaultCloseTime());
+  const [marketQuery, setMarketQuery] = useState("");
+  const [statusFilter, setStatusFilter] =
+    useState<MarketLedgerFilter>("all");
+  const normalizedQuery = marketQuery.trim().toLocaleLowerCase();
+  const filteredMarkets = filterAndSortMarkets(
+    state.markets,
+    marketQuery,
+    statusFilter,
+  );
+  const statusCounts: Record<MarketStatus | "all", number> = {
+    all: state.markets.length,
+    open: state.markets.filter((market) => market.status === "open").length,
+    resolved: state.markets.filter((market) => market.status === "resolved")
+      .length,
+    void: state.markets.filter((market) => market.status === "void").length,
+  };
+  const hasActiveLedgerFilters =
+    normalizedQuery.length > 0 || statusFilter !== "all";
+
+  function clearLedgerFilters() {
+    setMarketQuery("");
+    setStatusFilter("all");
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1235,109 +1272,167 @@ function MarketsTab({
             body="Write clear outcomes and a real deadline. Friends set their own odds."
           />
         ) : (
-          <div className="market-list">
-            {state.markets.map((market) => (
-              <article className="market-row" key={market.id}>
-                <div className="market-state">
-                  <StatusBadge status={market.status} />
-                  <span>by {market.creatorName}</span>
-                </div>
-                <h3>{market.question}</h3>
-                {market.description && <p>{market.description}</p>}
-                <div className="market-sides">
-                  <span
+          <>
+            <div className="market-ledger-tools">
+              <label className="market-search">
+                <span>Search all markets</span>
+                <input
+                  type="search"
+                  value={marketQuery}
+                  onChange={(event) => setMarketQuery(event.target.value)}
+                  placeholder="Question, context, outcome, creator, or status"
+                />
+              </label>
+              <div
+                className="market-status-filters"
+                role="group"
+                aria-label="Filter markets by status"
+              >
+                {MARKET_STATUS_FILTERS.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    aria-pressed={statusFilter === filter.value}
                     className={
-                      market.winningSelection === "a" ? "winner" : ""
+                      statusFilter === filter.value ? "selected" : ""
                     }
+                    onClick={() => setStatusFilter(filter.value)}
                   >
-                    A · {market.selectionA}
-                  </span>
-                  <span
-                    className={
-                      market.winningSelection === "b" ? "winner" : ""
-                    }
-                  >
-                    B · {market.selectionB}
-                  </span>
-                </div>
-                {market.status === "open" && (
-                  <div className="market-offer-actions">
-                    <span>Put your name on it</span>
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => onCreateOffer(market.id, "a")}
-                    >
-                      Offer on {market.selectionA}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => onCreateOffer(market.id, "b")}
-                    >
-                      Offer on {market.selectionB}
-                    </button>
-                  </div>
+                    <span>{filter.label}</span>
+                    <b>{statusCounts[filter.value]}</b>
+                  </button>
+                ))}
+              </div>
+              <div className="market-ledger-result-meta" aria-live="polite">
+                <span>
+                  Showing {filteredMarkets.length} of {state.markets.length}
+                </span>
+                {hasActiveLedgerFilters && (
+                  <button type="button" onClick={clearLedgerFilters}>
+                    Clear
+                  </button>
                 )}
-                <div className="market-row-footer">
-                  <span>Closes {dateTime(market.closesAt)}</span>
-                  {market.createdByMe && market.status === "open" && (
-                    <div className="resolve-actions">
-                      <button
-                        type="button"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void onAction(
-                            {
-                              type: "resolve_market",
-                              marketId: market.id,
-                              result: "a",
-                            },
-                            `${market.selectionA} recorded as the winner.`,
-                          )
-                        }
-                      >
-                        {market.selectionA} won
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void onAction(
-                            {
-                              type: "resolve_market",
-                              marketId: market.id,
-                              result: "b",
-                            },
-                            `${market.selectionB} recorded as the winner.`,
-                          )
-                        }
-                      >
-                        {market.selectionB} won
-                      </button>
-                      <button
-                        type="button"
-                        className="danger"
-                        disabled={busy !== null}
-                        onClick={() =>
-                          void onAction(
-                            {
-                              type: "resolve_market",
-                              marketId: market.id,
-                              result: "void",
-                            },
-                            "Market voided.",
-                          )
-                        }
-                      >
-                        Void
-                      </button>
+              </div>
+            </div>
+
+            {filteredMarkets.length === 0 ? (
+              <div className="market-ledger-empty" role="status">
+                <span>NO MATCHES</span>
+                <h3>No matching markets</h3>
+                <p>
+                  Try another phrase or include more market statuses in the
+                  ledger.
+                </p>
+                <button type="button" onClick={clearLedgerFilters}>
+                  Clear search and filters
+                </button>
+              </div>
+            ) : (
+              <div className="market-list">
+                {filteredMarkets.map((market) => (
+                  <article className="market-row" key={market.id}>
+                    <div className="market-state">
+                      <StatusBadge status={market.status} />
+                      <span>by {market.creatorName}</span>
                     </div>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
+                    <h3>{market.question}</h3>
+                    {market.description && <p>{market.description}</p>}
+                    <div className="market-sides">
+                      <span
+                        className={
+                          market.winningSelection === "a" ? "winner" : ""
+                        }
+                      >
+                        A · {market.selectionA}
+                      </span>
+                      <span
+                        className={
+                          market.winningSelection === "b" ? "winner" : ""
+                        }
+                      >
+                        B · {market.selectionB}
+                      </span>
+                    </div>
+                    {market.status === "open" && (
+                      <div className="market-offer-actions">
+                        <span>Put your name on it</span>
+                        <button
+                          type="button"
+                          disabled={busy !== null}
+                          onClick={() => onCreateOffer(market.id, "a")}
+                        >
+                          Offer on {market.selectionA}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy !== null}
+                          onClick={() => onCreateOffer(market.id, "b")}
+                        >
+                          Offer on {market.selectionB}
+                        </button>
+                      </div>
+                    )}
+                    <div className="market-row-footer">
+                      <span>Closes {dateTime(market.closesAt)}</span>
+                      {market.createdByMe && market.status === "open" && (
+                        <div className="resolve-actions">
+                          <button
+                            type="button"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              void onAction(
+                                {
+                                  type: "resolve_market",
+                                  marketId: market.id,
+                                  result: "a",
+                                },
+                                `${market.selectionA} recorded as the winner.`,
+                              )
+                            }
+                          >
+                            {market.selectionA} won
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              void onAction(
+                                {
+                                  type: "resolve_market",
+                                  marketId: market.id,
+                                  result: "b",
+                                },
+                                `${market.selectionB} recorded as the winner.`,
+                              )
+                            }
+                          >
+                            {market.selectionB} won
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              void onAction(
+                                {
+                                  type: "resolve_market",
+                                  marketId: market.id,
+                                  result: "void",
+                                },
+                                "Market voided.",
+                              )
+                            }
+                          >
+                            Void
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
@@ -1424,9 +1519,10 @@ function BettingDeadline({ value }: { value: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const label = status === "void" ? "voided" : status.replaceAll("_", " ");
   return (
     <span className={`status-badge status-${status.replaceAll("_", "-")}`}>
-      {status.replaceAll("_", " ")}
+      {label}
     </span>
   );
 }

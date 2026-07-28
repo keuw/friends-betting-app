@@ -8,6 +8,8 @@ import {
   type DebtEntry,
   type OfflineSettlementEntry,
 } from "../lib/domain";
+import { filterAndSortMarkets } from "../lib/market-ledger";
+import type { MarketView } from "../lib/contracts";
 
 test("derives American odds from exact two-sided risk", () => {
   assert.equal(americanOdds(10_000, 15_000), 150);
@@ -97,4 +99,47 @@ test("flips the displayed debtor when reciprocal debt is larger", () => {
       amountCents: 3_000,
     },
   ]);
+});
+
+test("filters and orders the All markets ledger independently from the composer", () => {
+  const market = (
+    id: string,
+    status: MarketView["status"],
+    closesAt: string,
+    overrides: Partial<MarketView> = {},
+  ): MarketView => ({
+    id,
+    question: `${id} question`,
+    description: `${id} context`,
+    selectionA: `${id} side A`,
+    selectionB: `${id} side B`,
+    closesAt,
+    status,
+    winningSelection: null,
+    creatorName: "Jordan",
+    createdByMe: false,
+    createdAt: "2026-07-28T12:00:00.000Z",
+    ...overrides,
+  });
+  const markets = [
+    market("resolved-latest", "resolved", "2032-01-01T00:00:00.000Z", {
+      creatorName: "Taylor Smith",
+    }),
+    market("open-early", "open", "2030-01-01T00:00:00.000Z"),
+    market("void-latest", "void", "2033-01-01T00:00:00.000Z"),
+    market("open-late", "open", "2031-01-01T00:00:00.000Z"),
+  ];
+
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "", "all").map(({ id }) => id),
+    ["open-late", "open-early", "resolved-latest", "void-latest"],
+  );
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "smith", "resolved").map(({ id }) => id),
+    ["resolved-latest"],
+  );
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "voided", "all").map(({ id }) => id),
+    ["void-latest"],
+  );
 });

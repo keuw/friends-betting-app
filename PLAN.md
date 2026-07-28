@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 7 implemented, verified, and published
+**Status:** Phase 8 complete
 
 ## Product contract
 
@@ -374,6 +374,54 @@ Acceptance:
 - Keyboard and touch users can search, choose, inspect, and remove legs.
 - Existing eight-leg, earliest-expiry, atomic acceptance, and parlay grading
   rules continue to pass.
+
+### Phase 8 — Searchable All markets ledger
+
+Make the Markets ledger easy to scan independently from the Board composer.
+The ledger uses the requested newest-closing-first order while the offer
+composer keeps its separate earliest-closing-first workflow.
+
+Interaction contract:
+
+- `All markets` includes a search field covering question, description,
+  outcomes, creator name, and status.
+- A status filter offers `All`, `Open`, `Resolved`, and `Voided`, with counts
+  and a visible pressed state.
+- Search and status filters compose, so a query can be narrowed to one market
+  state without clearing either control.
+- Results update immediately without hiding the market creation form.
+- The result count shows filtered and total market counts.
+- Open markets appear before resolved and void markets.
+- Within each status group, markets sort by betting close date descending.
+- No-result copy explains how to clear or broaden the search.
+
+Implementation:
+
+- [x] Add a failing production regression test for All markets search, status
+  filtering, and open-first descending close-date order.
+- [x] Change the state query to order status groups with open first and
+  `closes_at` descending within each group.
+- [x] Add the ledger search input, status filter with counts, filtered result
+  count, and no-results state.
+- [x] Style the search affordance consistently with the Board market search and
+  preserve responsive behavior.
+- [x] Verify the Board composer still sorts eligible markets by earliest close
+  date and all betting behavior remains unchanged.
+- [x] Run tests, lint, strict type checking, migration generation, and the
+  production build.
+- [x] Exercise local state with multiple open and resolved markets to verify the
+  exact order.
+- [x] Commit, push, publish a new Sites version, and verify production.
+
+Acceptance:
+
+- Searching finds markets by any visible identifying field.
+- Status filters correctly isolate open, resolved, and voided markets.
+- Search and status filters work together and remain keyboard accessible.
+- Clearing search restores the full ledger.
+- Open markets always precede non-open markets.
+- Later-closing open markets appear above earlier-closing open markets.
+- Offer composition remains earliest-closing-first.
 
 ## Required verification
 

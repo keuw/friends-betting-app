@@ -58,6 +58,9 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
   rejected/cancelled/void uses coral-tinted red.
 - Large collection pickers stay height-bounded, begin with search and a small
   result batch, and keep selected items visible outside the scrolling region.
+- Public ledgers pair free-text search with pressed-state status filters, keep
+  filtered and total counts visible, and offer a one-action reset when no
+  records match.
 
 ## Responsive behavior
 

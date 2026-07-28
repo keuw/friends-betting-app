@@ -75,3 +75,22 @@ test("parlay legs expose deadlines and the market picker stays manageable", asyn
   assert.match(clientBundle, /Show more markets/);
   assert.match(clientBundle, /Up to 8 legs/);
 });
+
+test("All markets can be searched, filtered, and keeps its ledger order", async () => {
+  const [serverBundle, clientBundle] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+  ]);
+
+  assert.match(clientBundle, /Search all markets/);
+  assert.match(clientBundle, /Question, context, outcome, creator, or status/);
+  assert.match(clientBundle, /Filter markets by status/);
+  assert.match(clientBundle, /Voided/);
+  assert.match(clientBundle, /No matching markets/);
+  assert.match(clientBundle, /Clear search and filters/);
+  assert.match(
+    serverBundle,
+    /CASE m\.status WHEN 'open' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END/,
+  );
+  assert.match(serverBundle, /datetime\(m\.closes_at\) DESC/);
+});

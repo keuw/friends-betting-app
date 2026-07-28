@@ -233,8 +233,8 @@ export async function getAppState(user: AppUser): Promise<AppState> {
        FROM markets m
        JOIN users u ON u.id = m.creator_user_id
        ORDER BY
-         CASE m.status WHEN 'open' THEN 0 ELSE 1 END,
-         datetime(m.closes_at) ASC,
+         CASE m.status WHEN 'open' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
+         datetime(m.closes_at) DESC,
          datetime(m.created_at) DESC`,
     ),
     db.prepare(

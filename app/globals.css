@@ -1715,6 +1715,127 @@ button.brand-lockup {
   grid-template-columns: 1fr 1fr;
 }
 
+.market-ledger {
+  min-width: 0;
+}
+
+.market-ledger-tools {
+  display: grid;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+.market-status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.market-status-filters button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.market-status-filters button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.market-status-filters button.selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.market-status-filters button b {
+  display: grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 1rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.57rem;
+}
+
+.market-ledger-result-meta {
+  display: flex;
+  min-height: 1.7rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.58rem;
+}
+
+.market-ledger-result-meta button {
+  min-height: 1.7rem;
+  padding: 0 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
+.market-ledger-empty {
+  display: grid;
+  min-height: 15rem;
+  place-items: center;
+  align-content: center;
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  text-align: center;
+}
+
+.market-ledger-empty > span {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.market-ledger-empty h3 {
+  margin: 0.55rem 0 0;
+  font-size: 1.25rem;
+}
+
+.market-ledger-empty p {
+  max-width: 28rem;
+  margin: 0.45rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.market-ledger-empty button {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.85rem;
+  border-color: var(--ink);
+  background: var(--acid);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
 .market-list {
   display: flex;
   flex-direction: column;
