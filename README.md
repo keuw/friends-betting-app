@@ -23,6 +23,14 @@ external method, both parties confirm the settlement in Sidebet.
 See [PLAN.md](./PLAN.md) for the full domain model, race-condition contract, and
 release plan.
 
+## Contributing
+
+The repository is public and contributions are welcome from the friend group.
+Fork it and open a pull request, or ask the repository owner for collaborator
+access if you need to push branches directly. Start with
+[CONTRIBUTING.md](./CONTRIBUTING.md) and follow [DESIGN.md](./DESIGN.md) for
+interface changes.
+
 ## Local development
 
 Requires Node.js `>=22.13.0`.

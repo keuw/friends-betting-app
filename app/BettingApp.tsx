@@ -85,21 +85,25 @@ export function BettingApp({
     state?.bets.filter(
       (bet) => bet.isParticipant && bet.status === "pending",
     ).length ?? 0;
-  const myBalance = state?.pairBalances.find(
-    (balance) => balance.involvesMe,
-  );
+  const myNetCents =
+    state?.pairBalances.reduce((total, balance) => {
+      if (balance.iOwe) return total - balance.amountCents;
+      if (balance.owedToMe) return total + balance.amountCents;
+      return total;
+    }, 0) ?? 0;
 
   return (
     <main className="app-shell">
       <header className="app-header">
-        <a
+        <button
+          type="button"
           className="brand-lockup inverse"
-          href={signOutPath}
+          onClick={() => setTab("board")}
           aria-label="Sidebet board"
         >
           <span className="brand-mark">S/B</span>
           <span>SIDEBET</span>
-        </a>
+        </button>
         <div className="header-actions">
           <button
             type="button"
@@ -108,7 +112,7 @@ export function BettingApp({
             aria-label="Refresh board"
             disabled={busy !== null}
           >
-            ↻
+            <span aria-hidden="true">{busy === "loading" ? "…" : "↻"}</span>
           </button>
           <div className="user-chip">
             <span className="avatar">{initials(viewer.displayName)}</span>
@@ -121,16 +125,13 @@ export function BettingApp({
       </header>
 
       <section className="app-intro">
-        <div>
-          <p className="eyebrow light">
-            <span className="live-dot" />
-            THE BOARD IS OPEN
-          </p>
+        <div className="app-intro-copy">
           <h1>
-            Put it on the board,
-            <br />
-            <em>{firstName(viewer.displayName)}.</em>
+            The board is open, <em>{firstName(viewer.displayName)}.</em>
           </h1>
+          <p>
+            Post a line, work the odds, or settle what&apos;s already finished.
+          </p>
         </div>
         <div className="score-strip">
           <Metric
@@ -144,11 +145,11 @@ export function BettingApp({
             tone="paper"
           />
           <Metric
-            value={myBalance ? money(myBalance.amountCents) : "$0"}
+            value={money(Math.abs(myNetCents))}
             label={
-              myBalance?.iOwe
+              myNetCents < 0
                 ? "You owe"
-                : myBalance?.owedToMe
+                : myNetCents > 0
                   ? "Owed to you"
                   : "Net settled"
             }
@@ -271,14 +272,13 @@ function BoardTab({
       <div className="feed-column">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">LIVE MARKETPLACE</p>
             <h2>Offers waiting for a friend</h2>
           </div>
           <span className="count-pill">{openOffers.length} open</span>
         </div>
         {openOffers.length === 0 ? (
           <EmptyCard
-            number="01"
+            label="NO OFFERS"
             title="The board is wide open"
             body="Create the first offer, or add a market if there is nothing worth calling yet."
           />
@@ -704,14 +704,13 @@ function BetsTab({ state }: { state: AppState }) {
     <section className="single-column">
       <div className="section-heading large">
         <div>
-          <p className="section-kicker">LOCKED IN</p>
           <h2>Every matched bet</h2>
         </div>
         <span className="count-pill">{state.bets.length} total</span>
       </div>
       {state.bets.length === 0 ? (
         <EmptyCard
-          number="00"
+          label="NO BETS"
           title="Nothing matched yet"
           body="Take an offer from the board or negotiate terms with a friend."
         />
@@ -774,14 +773,13 @@ function SettleTab({
       <div>
         <div className="section-heading">
           <div>
-            <p className="section-kicker">NETTED AUTOMATICALLY</p>
             <h2>Who owes who</h2>
           </div>
         </div>
         <div className="balance-list">
           {state.pairBalances.length === 0 ? (
             <EmptyCard
-              number="$0"
+              label="SETTLED"
               title="Everybody is square"
               body="Resolved bets and confirmed offline payments will appear here."
             />
@@ -801,7 +799,6 @@ function SettleTab({
       <aside className="settlement-panel">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">TWO-PARTY RECEIPTS</p>
             <h2>Offline confirmations</h2>
           </div>
         </div>
@@ -981,7 +978,6 @@ function MarketsTab({
   return (
     <section className="markets-grid">
       <form className="market-form" onSubmit={submit}>
-        <p className="section-kicker">YOU ARE THE ORACLE</p>
         <h2>Create a market</h2>
         <p className="form-note">
           You resolve markets you create, so you cannot bet on them yourself.
@@ -1048,14 +1044,13 @@ function MarketsTab({
       <div className="market-ledger">
         <div className="section-heading">
           <div>
-            <p className="section-kicker">EVENT LEDGER</p>
             <h2>All markets</h2>
           </div>
           <span className="count-pill">{state.markets.length}</span>
         </div>
         {state.markets.length === 0 ? (
           <EmptyCard
-            number="01"
+            label="NO MARKETS"
             title="Create the first market"
             body="Write clear outcomes and a real deadline. Friends set their own odds."
           />
@@ -1181,6 +1176,7 @@ function TabButton({
   return (
     <button
       type="button"
+      aria-pressed={active}
       className={active ? "active" : ""}
       onClick={onClick}
     >
@@ -1229,17 +1225,17 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function EmptyCard({
-  number,
+  label,
   title,
   body,
 }: {
-  number: string;
+  label: string;
   title: string;
   body: string;
 }) {
   return (
     <div className="empty-card">
-      <span>{number}</span>
+      <span>{label}</span>
       <div>
         <h3>{title}</h3>
         <p>{body}</p>

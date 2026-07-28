@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
-**Updated:** 2026-07-27  
-**Status:** Implemented, verified, and published
+**Updated:** 2026-07-28
+**Status:** Impeccable design polish implemented, verified, and published
 
 ## Product contract
 
@@ -223,6 +223,64 @@ Acceptance:
 - All repository checks pass.
 - The public URL loads and requires ChatGPT sign-in for group data.
 - Source history and deployed source identify the same validated commit.
+
+### Phase 5 — Impeccable UI polish
+
+This phase follows the `pbakaus/impeccable` polish playbook. It preserves
+Sidebet's existing screen-printed sports-zine identity and product behavior
+while making the signed-in experience feel calmer, faster to scan, and more
+consistent as an operating interface.
+
+Evidence from the current surface:
+
+- The signed-in hero occupies roughly 25rem before the primary betting
+  workspace, which delays the main task.
+- The palette is distinctive, but accent colors, hard shadows, rotations, and
+  one-off radii need clearer semantic roles inside the application.
+- Focus treatment is defined for only one form family rather than every
+  interactive control.
+- The tab bar and dense betting cards need stronger small-screen prioritization.
+- The header logo currently points to the sign-out route, making a brand click
+  an unexpected destructive navigation.
+- There is no durable `DESIGN.md` recording the visual system for future
+  contributors.
+
+Implementation:
+
+- [x] Create `DESIGN.md` with the incumbent visual direction, semantic color
+  roles, typography, spacing, radius, border, shadow, motion, and responsive
+  rules.
+- [x] Normalize reusable CSS tokens and shared focus, hover, active, disabled,
+  loading, error, and success states.
+- [x] Compress the signed-in introduction into an operate-mode command header
+  so the board and offer composer appear much earlier in the first viewport.
+- [x] Make brand navigation safe, keep sign-out explicit, and improve header
+  behavior at narrow widths.
+- [x] Refine desktop and mobile tab navigation with clearer active state,
+  consistent touch targets, and sticky access where it improves task flow.
+- [x] Rebalance the offer composer and offer cards around proposition, maximum
+  loss, odds, counter history, and primary action hierarchy.
+- [x] Polish matched-bet, debt, settlement, market, loading, empty, error, and
+  success states to the same visual quality floor.
+- [x] Preserve expressive shadows and editorial texture on the persuasive
+  landing page while reducing decorative noise in task-heavy signed-in views.
+- [x] Verify keyboard focus, long names/questions, reduced motion, and layouts
+  at mobile, intermediate, and wide breakpoints.
+- [x] Run tests, lint, type-checking, and the production build.
+- [x] Commit and push the exact verified source, then deploy a new public Sites
+  version and verify the production URL.
+
+Acceptance:
+
+- The first actionable board content is visible without a long decorative
+  scroll on common laptop and phone viewports.
+- Color and typography communicate consistent meanings across every tab.
+- Every interactive control has a visible keyboard focus state and an
+  appropriate disabled/loading presentation.
+- Long friend names and market questions do not break cards or navigation.
+- No betting, counteroffer, settlement, authentication, or concurrency behavior
+  changes.
+- GitHub and the public deployment identify the same verified commit.
 
 ## Required verification
 

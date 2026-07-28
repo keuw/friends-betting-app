@@ -26,10 +26,6 @@ export default async function Home() {
 
         <section className="landing-hero">
           <div className="landing-copy">
-            <p className="eyebrow">
-              <span className="live-dot" />
-              THE GROUP CHAT, WITH RECEIPTS
-            </p>
             <h1>
               Friendly wagers.
               <br />
