@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
@@ -37,4 +37,24 @@ test("production bundle includes both API routes and the D1 race guard", async (
   assert.match(bundle, /\/api\/state/);
   assert.match(migration, /CREATE UNIQUE INDEX `bets_offer_unique`/);
   assert.match(migration, /CREATE TABLE `offline_settlements`/);
+});
+
+test("market creators can participate in offers on their own markets", async () => {
+  const serverBundle = await readFile(
+    new URL("dist/server/index.js", root),
+    "utf8",
+  );
+  const clientAssetDirectory = new URL("dist/client/assets/", root);
+  const clientAssetNames = await readdir(clientAssetDirectory);
+  const clientBundle = (
+    await Promise.all(
+      clientAssetNames
+        .filter((name) => name.endsWith(".js"))
+        .map((name) => readFile(new URL(name, clientAssetDirectory), "utf8")),
+    )
+  ).join("\n");
+
+  assert.match(clientBundle, /Market creators can place offers too/);
+  assert.doesNotMatch(serverBundle, /ORACLE_CONFLICT/);
+  assert.doesNotMatch(clientBundle, /cannot bet on a market you created/i);
 });

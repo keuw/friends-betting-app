@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Impeccable design polish implemented, verified, and published
+**Status:** Phase 6 implemented, verified, and published
 
 ## Product contract
 
@@ -30,7 +30,10 @@ Every accepted bet and debt-settlement action is visible to signed-in members.
 - Accepting any root or counteroffer atomically consumes the root offer and
   supersedes all other branches.
 - The event creator acts as oracle and may resolve or void that event.
-- An event creator may not bet on a proposition containing their event.
+- Market ownership does not restrict betting participation: the creator may
+  make, counter, or accept offers containing their own market.
+- Creator participation and creator resolution remain visible in the public
+  activity ledger so the friend group can audit the conflict of interest.
 - Accepted bets and negotiation history are immutable.
 - Market resolution creates a pairwise debt from loser to winner.
 - Reciprocal debts net automatically in the display without rewriting history.
@@ -281,6 +284,44 @@ Acceptance:
 - No betting, counteroffer, settlement, authentication, or concurrency behavior
   changes.
 - GitHub and the public deployment identify the same verified commit.
+
+### Phase 6 — Creator participation
+
+Allow a market creator to participate on either side of bets involving that
+market. This changes the original oracle-conflict rule while preserving the
+existing open-market checks, self-accept restriction, one-acceptor transaction,
+immutable bet terms, and public audit history.
+
+Implementation:
+
+- [x] Add a failing production regression test proving the server no longer
+  rejects creator participation and the interface advertises the new rule.
+- [x] Remove the creator-only rejection from offer creation, counteroffers, and
+  offer acceptance while preserving all market-state and participant checks.
+- [x] Include open markets created by the viewer in the offer composer.
+- [x] Add a clear `Create offer` action to each open market so its creator—or
+  any friend—can jump directly into a preselected offer draft.
+- [x] Replace the old oracle-conflict copy in the interface, README, and
+  contributor-facing product rules with the new trust-based contract.
+- [x] Run unit tests, the production regression suite, lint, strict type
+  checking, migration generation, and the production build.
+- [x] Exercise the local API with separate creator and friend identities to
+  prove a creator can both publish an offer and take/counter a friend's offer
+  on their own market.
+- [x] Commit and push the verified source, publish a new Sites version, and
+  verify the live workflow.
+
+Acceptance:
+
+- A creator can publish a straight bet or parlay containing a market they
+  created.
+- A creator can counter or accept another friend's offer on their market.
+- A user still cannot accept their own root offer or bypass counteroffer
+  recipient rules.
+- Closed, resolved, void, or expired markets remain ineligible.
+- Concurrent acceptance still produces exactly one matched bet.
+- Creator-authored markets, offers, acceptances, and resolutions remain public
+  in the signed-in activity ledger.
 
 ## Required verification
 

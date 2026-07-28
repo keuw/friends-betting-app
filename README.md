@@ -15,7 +15,9 @@ external method, both parties confirm the settlement in Sidebet.
   deposit, balance, or credit limit.
 - An offer can contain one market or multiple legs. Every leg must win for a
   parlay to win; a void leg is ignored.
-- The market creator acts as its resolver and cannot bet on that market.
+- The market creator acts as its resolver and may also make, counter, or accept
+  offers on that market. Participation and resolution remain public to the
+  group.
 - Settled bets create pairwise debts. Reciprocal debts are netted before the app
   shows who owes whom.
 - Offline settlement proposals require confirmation from the other party.

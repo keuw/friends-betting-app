@@ -40,6 +40,8 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - One root offer can create at most one matched bet.
 - Offers and counteroffers never reserve funds.
 - Accepting any branch consumes the root offer.
+- Market creators may participate in offers on markets they resolve; both the
+  participation and resolution stay visible in the public activity ledger.
 - Market resolution creates an immutable debt record.
 - Offline payment claims require confirmation from the other party.
 - The app never holds, transfers, or verifies money.

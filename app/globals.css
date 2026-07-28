@@ -1569,6 +1569,35 @@ button.brand-lockup {
   background: var(--acid);
 }
 
+.market-offer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.market-offer-actions > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.market-offer-actions button {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.65rem;
+  border-color: var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.market-offer-actions button:hover:not(:disabled) {
+  background: var(--acid);
+}
+
 .market-row-footer {
   display: flex;
   align-items: center;

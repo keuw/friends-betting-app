@@ -32,6 +32,9 @@ export function BettingApp({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>("loading");
+  const [offerSelections, setOfferSelections] = useState<
+    Record<string, Selection>
+  >({});
 
   const loadState = useCallback(async () => {
     setBusy("loading");
@@ -222,6 +225,8 @@ export function BettingApp({
               busy={busy}
               onAction={runAction}
               onOpenMarkets={() => setTab("markets")}
+              selections={offerSelections}
+              onSelectionsChange={setOfferSelections}
             />
           )}
           {tab === "bets" && <BetsTab state={state} />}
@@ -229,7 +234,15 @@ export function BettingApp({
             <SettleTab state={state} busy={busy} onAction={runAction} />
           )}
           {tab === "markets" && (
-            <MarketsTab state={state} busy={busy} onAction={runAction} />
+            <MarketsTab
+              state={state}
+              busy={busy}
+              onAction={runAction}
+              onCreateOffer={(marketId, selection) => {
+                setOfferSelections({ [marketId]: selection });
+                setTab("board");
+              }}
+            />
           )}
         </>
       )}
@@ -253,11 +266,19 @@ function BoardTab({
   busy,
   onAction,
   onOpenMarkets,
+  selections,
+  onSelectionsChange,
 }: {
   state: AppState;
   busy: string | null;
   onAction: (action: AppAction, message: string) => Promise<void>;
   onOpenMarkets: () => void;
+  selections: Record<string, Selection>;
+  onSelectionsChange: (
+    selections:
+      | Record<string, Selection>
+      | ((current: Record<string, Selection>) => Record<string, Selection>),
+  ) => void;
 }) {
   const openOffers = state.offers.filter((offer) => offer.status === "open");
 
@@ -268,6 +289,8 @@ function BoardTab({
         busy={busy}
         onAction={onAction}
         onOpenMarkets={onOpenMarkets}
+        selections={selections}
+        onSelectionsChange={onSelectionsChange}
       />
       <div className="feed-column">
         <div className="section-heading">
@@ -304,16 +327,21 @@ function OfferComposer({
   busy,
   onAction,
   onOpenMarkets,
+  selections,
+  onSelectionsChange,
 }: {
   markets: MarketView[];
   busy: string | null;
   onAction: (action: AppAction, message: string) => Promise<void>;
   onOpenMarkets: () => void;
+  selections: Record<string, Selection>;
+  onSelectionsChange: (
+    selections:
+      | Record<string, Selection>
+      | ((current: Record<string, Selection>) => Record<string, Selection>),
+  ) => void;
 }) {
-  const availableMarkets = markets.filter(
-    (market) => market.status === "open" && !market.createdByMe,
-  );
-  const [selections, setSelections] = useState<Record<string, Selection>>({});
+  const availableMarkets = markets.filter((market) => market.status === "open");
   const [makerRisk, setMakerRisk] = useState("20");
   const [takerRisk, setTakerRisk] = useState("20");
   const selectedCount = Object.keys(selections).length;
@@ -339,7 +367,7 @@ function OfferComposer({
       },
       "Offer posted to the board.",
     );
-    setSelections({});
+    onSelectionsChange({});
   }
 
   return (
@@ -356,8 +384,7 @@ function OfferComposer({
         <div className="composer-empty">
           <span>NO ELIGIBLE MARKETS</span>
           <p>
-            You cannot bet on a market you created. Ask a friend to create one,
-            or create a market for them.
+            Create an open market first, then choose a side and set your terms.
           </p>
           <button type="button" onClick={onOpenMarkets}>
             Go to markets →
@@ -377,7 +404,7 @@ function OfferComposer({
                     type="button"
                     className={selections[market.id] === "a" ? "selected" : ""}
                     onClick={() =>
-                      setSelections((current) =>
+                      onSelectionsChange((current) =>
                         toggleSelection(current, market.id, "a"),
                       )
                     }
@@ -388,7 +415,7 @@ function OfferComposer({
                     type="button"
                     className={selections[market.id] === "b" ? "selected" : ""}
                     onClick={() =>
-                      setSelections((current) =>
+                      onSelectionsChange((current) =>
                         toggleSelection(current, market.id, "b"),
                       )
                     }
@@ -944,10 +971,12 @@ function MarketsTab({
   state,
   busy,
   onAction,
+  onCreateOffer,
 }: {
   state: AppState;
   busy: string | null;
   onAction: (action: AppAction, message: string) => Promise<void>;
+  onCreateOffer: (marketId: string, selection: Selection) => void;
 }) {
   const [question, setQuestion] = useState("");
   const [description, setDescription] = useState("");
@@ -980,7 +1009,8 @@ function MarketsTab({
       <form className="market-form" onSubmit={submit}>
         <h2>Create a market</h2>
         <p className="form-note">
-          You resolve markets you create, so you cannot bet on them yourself.
+          Market creators can place offers too. You still resolve the result,
+          and every action stays public to the group.
         </p>
         <label>
           <span>The question</span>
@@ -1080,6 +1110,25 @@ function MarketsTab({
                     B · {market.selectionB}
                   </span>
                 </div>
+                {market.status === "open" && (
+                  <div className="market-offer-actions">
+                    <span>Put your name on it</span>
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => onCreateOffer(market.id, "a")}
+                    >
+                      Offer on {market.selectionA}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => onCreateOffer(market.id, "b")}
+                    >
+                      Offer on {market.selectionB}
+                    </button>
+                  </div>
+                )}
                 <div className="market-row-footer">
                   <span>Closes {dateTime(market.closesAt)}</span>
                   {market.createdByMe && market.status === "open" && (

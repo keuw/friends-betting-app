@@ -635,13 +635,6 @@ async function createOffer(
         "A selected market is already closed.",
       );
     }
-    if (market.creator_user_id === user.id) {
-      throw new AppError(
-        403,
-        "ORACLE_CONFLICT",
-        "You cannot bet on a market you are responsible for resolving.",
-      );
-    }
   }
 
   const offerId = crypto.randomUUID();
@@ -706,11 +699,18 @@ async function createCounteroffer(
     throw new AppError(409, "OFFER_TAKEN", "This offer is no longer open.");
   }
   const counterMarkets = await getMarketsForOffer(root.id);
-  if (counterMarkets.some((market) => market.creator_user_id === user.id)) {
+  if (
+    counterMarkets.length === 0 ||
+    counterMarkets.some(
+      (market) =>
+        market.status !== "open" ||
+        new Date(market.closes_at).getTime() <= Date.now(),
+    )
+  ) {
     throw new AppError(
-      403,
-      "ORACLE_CONFLICT",
-      "You cannot negotiate a bet on a market you are responsible for resolving.",
+      409,
+      "MARKET_CLOSED",
+      "A market in this offer is already closed.",
     );
   }
 
@@ -876,14 +876,6 @@ async function acceptOffer(
       "A market in this offer is already closed.",
     );
   }
-  if (marketRows.some((market) => market.creator_user_id === user.id)) {
-    throw new AppError(
-      403,
-      "ORACLE_CONFLICT",
-      "You cannot accept a bet on a market you are responsible for resolving.",
-    );
-  }
-
   const betId = crypto.randomUUID();
   try {
     const results = await db.batch([
