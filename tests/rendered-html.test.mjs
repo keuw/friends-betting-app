@@ -89,6 +89,12 @@ test("parlay legs expose deadlines and the market picker stays manageable", asyn
   assert.match(clientBundle, /Up to 8 legs/);
 });
 
+test("posted offers show their exact creation date and time", async () => {
+  const clientBundle = await readClientBundle();
+
+  assert.match(clientBundle, /Posted /);
+});
+
 test("All markets can be searched, filtered, and keeps its ledger order", async () => {
   const [serverBundle, clientBundle] = await Promise.all([
     readFile(new URL("dist/server/index.js", root), "utf8"),

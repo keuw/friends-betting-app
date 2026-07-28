@@ -659,7 +659,11 @@ function OfferCard({
           <span className="avatar avatar-ink">{initials(offer.makerName)}</span>
           <div>
             <strong>{offer.makerName}</strong>
-            <span>{relativeTime(offer.createdAt)}</span>
+            <span>
+              <time dateTime={offer.createdAt}>
+                Posted {dateTime(offer.createdAt)}
+              </time>
+            </span>
           </div>
         </div>
         <div className="offer-badges">
@@ -2413,17 +2417,24 @@ function dateTime(value: string): string {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(timestampDate(value));
 }
 
 function relativeTime(value: string): string {
-  const elapsed = Date.now() - new Date(value).getTime();
+  const elapsed = Date.now() - timestampDate(value).getTime();
   const minutes = Math.max(0, Math.floor(elapsed / 60_000));
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function timestampDate(value: string): Date {
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(" ", "T")}Z`
+    : value;
+  return new Date(normalized);
 }
 
 function defaultCloseTime(): string {
