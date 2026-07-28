@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 9 in progress
+**Status:** Phase 9 complete
 
 ## Product contract
 
@@ -558,7 +558,7 @@ Implementation:
 - [x] Exercise separate creator, maker, and taker identities locally to prove
   old market terms still settle correctly and a bet changes only after the
   counterparty accepts.
-- [/] Commit and push the verified source, publish a new Sites version, and
+- [x] Commit and push the verified source, publish a new Sites version, and
   verify the production URL.
 
 Acceptance:
