@@ -1,5 +1,7 @@
 # Sidebet
 
+**Live app:** [Open Sidebet](https://sidebet-friends.tonykeuw.chatgpt.site)
+
 Sidebet is a private social betting board for friends. Any signed-in user can
 publish an offer, another friend can accept it or counter the terms, and the
 group can see the resulting bets and offline debts.
