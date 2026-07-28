@@ -13,7 +13,11 @@
     "test:unit": "tsx --test tests/*.test.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "notion:setup": "node scripts/create-notion-archive.mjs",
+    "notion:export": "node scripts/trigger-notion-export.mjs",
+    "scheduler:dev": "wrangler dev --config wrangler.scheduler.jsonc --test-scheduled",
+    "scheduler:deploy": "wrangler deploy --config wrangler.scheduler.jsonc"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

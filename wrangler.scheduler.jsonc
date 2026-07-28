@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "sidebet-notion-export-scheduler",
+  "main": "scheduler/index.ts",
+  "compatibility_date": "2026-05-22",
+  "triggers": {
+    "crons": ["0 17 * * SUN"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "SIDEBET_EXPORT_URL": "https://sidebet-friends.tonykeuw.chatgpt.site/api/internal/notion-export"
+  }
+}

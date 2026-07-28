@@ -138,3 +138,23 @@ test("market and matched-bet edits preserve immutable revision history", async (
   assert.match(clientBundle, /Accept revision/);
   assert.match(clientBundle, /Current terms stay active until your friend accepts/);
 });
+
+test("weekly Notion export is protected, idempotent, and contains no committed token", async () => {
+  const [serverBundle, migrations, schedulerConfig] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readMigrations(),
+    readFile(new URL("wrangler.scheduler.jsonc", root), "utf8"),
+  ]);
+  const notionTokenPrefix = ["ntn", "_"].join("");
+
+  assert.match(serverBundle, /\/api\/internal\/notion-export/);
+  assert.match(serverBundle, /NOTION_EXPORT_SECRET/);
+  assert.match(serverBundle, /Notion-Version/);
+  assert.match(serverBundle, /2026-03-11/);
+  assert.match(migrations, /CREATE TABLE `notion_bet_exports`/);
+  assert.match(migrations, /CREATE TABLE `notion_export_runs`/);
+  assert.match(migrations, /notion_export_runs_one_running/);
+  assert.match(schedulerConfig, /0 17 \* \* SUN/);
+  assert.doesNotMatch(serverBundle, new RegExp(`${notionTokenPrefix}[A-Za-z0-9]{20,}`));
+  assert.doesNotMatch(schedulerConfig, /SIDEBET_EXPORT_SECRET"\s*:/);
+});

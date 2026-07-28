@@ -220,6 +220,30 @@ const SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS audit_entity_idx ON audit_events(entity_type, entity_id)`,
   `CREATE INDEX IF NOT EXISTS audit_created_idx ON audit_events(created_at)`,
+  `CREATE TABLE IF NOT EXISTS notion_bet_exports (
+    bet_id TEXT PRIMARY KEY NOT NULL REFERENCES bets(id),
+    notion_page_id TEXT,
+    payload_hash TEXT,
+    last_exported_at TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS notion_bet_exports_page_unique ON notion_bet_exports(notion_page_id) WHERE notion_page_id IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS notion_export_runs (
+    id TEXT PRIMARY KEY NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'succeeded', 'partial', 'failed')),
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TEXT,
+    lease_expires_at TEXT NOT NULL,
+    scanned_count INTEGER NOT NULL DEFAULT 0,
+    created_count INTEGER NOT NULL DEFAULT 0,
+    updated_count INTEGER NOT NULL DEFAULT 0,
+    unchanged_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS notion_export_runs_one_running ON notion_export_runs(status) WHERE status = 'running'`,
+  `CREATE INDEX IF NOT EXISTS notion_export_runs_started_idx ON notion_export_runs(started_at)`,
 ] as const;
 
 const REVISION_BACKFILL_STATEMENTS = [

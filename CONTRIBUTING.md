@@ -50,6 +50,8 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - Market resolution creates an immutable debt record.
 - Offline payment claims require confirmation from the other party.
 - The app never holds, transfers, or verifies money.
+- The weekly Notion archive is a human-readable matched-bet ledger, not a
+  complete backup. Do not expand its scope to identity emails or credentials.
 
 ## Interface changes
 
@@ -63,3 +65,7 @@ disabled, error, and success states.
 Prefer small pull requests that change one workflow or concern. Avoid unrelated
 refactors, preserve existing tests, and add focused coverage when behavior
 changes.
+
+Never commit Notion tokens, export trigger secrets, local `.dev.vars`, D1
+exports, or copied production responses. Public scheduler configuration may
+contain the endpoint URL and variable names only.

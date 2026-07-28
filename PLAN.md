@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 9 complete
+**Status:** Phase 11 code verified; live Notion and Cron setup in progress
 
 ## Product contract
 
@@ -580,6 +580,204 @@ Acceptance:
   partial state and a structured conflict for the loser.
 - Existing offer acceptance, counteroffer, parlay grading, settlement, search,
   authentication, and public-audit behavior continue to pass.
+
+### Phase 10 — Decline counteroffers
+
+Let the current counteroffer recipient end that negotiation branch without
+accepting it or proposing another set of terms. Declining does not cancel the
+root offer and does not affect unrelated counteroffers from other friends.
+
+Interaction contract:
+
+- The recipient of each latest pending counteroffer sees `Accept`, `Counter`,
+  and `Decline`.
+- No other user sees an enabled decline control for that counteroffer.
+- Declining removes that counteroffer from the active negotiation list while
+  leaving the root offer open for acceptance or future counteroffers.
+- A declined counteroffer cannot later be accepted or countered.
+- The action records a dedicated `declined_counteroffer` audit event. The
+  existing terminal `superseded` storage state is reused, so no schema migration
+  is required.
+- If accept, counter, and decline requests race, exactly one transition wins;
+  the others receive a structured stale-counter response and create no bet or
+  follow-up counteroffer.
+
+Implementation:
+
+- [ ] Add failing action-parser and production regressions for the decline
+  action, recipient-only control, and user-facing copy.
+- [ ] Add `decline_counteroffer` to the action contract, parser, and server
+  dispatcher.
+- [ ] Implement an idempotent recipient-authorized decline transition with a
+  dedicated public audit event.
+- [ ] Add database guards so accepting or countering a counteroffer rechecks
+  that exact counter is still pending inside the same atomic batch.
+- [ ] Add a clearly secondary `Decline` button beside `Accept` and `Counter`,
+  with disabled, success, and stale-state handling.
+- [ ] Update the README and contributor invariants for the terminal decline
+  behavior.
+- [ ] Run unit tests, rendered-output tests, lint, strict type checking, and the
+  production build.
+- [ ] Exercise separate proposer and recipient identities locally, including a
+  concurrent accept-versus-decline check.
+- [ ] Commit and push the verified source, publish a new Sites version, and
+  verify the production URL.
+
+Acceptance:
+
+- A counteroffer recipient can decline without matching a bet.
+- Declining one counteroffer leaves the root offer and unrelated counteroffers
+  open.
+- The proposer cannot decline their own proposal.
+- Declined terms cannot later be accepted or used as the parent of another
+  counteroffer.
+- Concurrent accept, counter, or decline requests never create partial or
+  contradictory state.
+- Existing offer acceptance, negotiation, market, bet, and settlement behavior
+  continues to pass.
+
+### Phase 11 — Weekly Notion matched-bet archive
+
+Create a durable, human-readable archive outside the hosted Sidebet project.
+One Notion data-source record represents one immutable Sidebet bet ID. Weekly
+exports upsert the latest status, active terms, legs, and complete revision
+history without duplicating records.
+
+This archive is intentionally narrower than a restorable D1 backup. It
+preserves matched-bet evidence for the friend group, but it does not replace
+full exports of users, unmatched offers, debts, offline settlements, or every
+audit event.
+
+Architecture contract:
+
+- Keep the existing Sites deployment and ChatGPT sign-in flow unchanged.
+- Run the schedule from a small, separately deployed Cloudflare Worker in the
+  owner's Cloudflare account.
+- Configure the Cron Worker for `0 17 * * SUN` (Sunday at 17:00 UTC).
+- The Cron Worker sends a `POST` request to a private internal endpoint on the
+  Sites app using a high-entropy bearer secret.
+- The Sites app reads matched bets from its existing D1 binding and writes them
+  to Notion using an internal Notion connection.
+- Store `NOTION_TOKEN` and `NOTION_EXPORT_SECRET` as encrypted Sites runtime
+  secrets. Store the matching trigger secret only as an encrypted secret on
+  the Cron Worker.
+- Store the Notion data-source ID and export URL as runtime configuration, not
+  source-code credentials.
+- The Cron Worker never receives D1 credentials or the Notion token.
+- The repository remains safe to keep public: no secret may be committed,
+  included in build output, returned by an endpoint, or written to logs.
+
+Notion record contract:
+
+- Use `Sidebet Bet ID` as the stable external key and enforce idempotency in the
+  exporter.
+- Use a readable title containing the maker and taker display names.
+- Store maker and taker display names, never identity email addresses.
+- Store exact maker and taker risk amounts, status, matched time, optional
+  settlement time, active revision number, leg count, and last export time.
+- Render active straight/parlay legs with the frozen market-revision question,
+  chosen outcome, revision number, close time, and result state.
+- Render the complete matched-bet revision timeline with amounts, legs, change
+  note, proposer and recipient display names, status, and response time.
+- Include a link to the live Sidebet app.
+- Keep the Notion database private unless the owner explicitly changes its
+  workspace sharing settings.
+
+Idempotency and failure contract:
+
+- Add a `notion_bet_exports` table keyed by `bet_id` with the Notion page ID,
+  canonical payload hash, last successful export time, and last error.
+- Add a `notion_export_runs` table recording start/end times, status, scanned,
+  created, updated, unchanged, and failed counts.
+- Query all matched bets through a dedicated export query; do not reuse the
+  friend-facing `LIMIT 100` state query.
+- When a stored page ID is absent or stale, query Notion by exact
+  `Sidebet Bet ID` before creating a page.
+- Skip an update when the canonical payload hash is unchanged.
+- Retry Notion `429` and retryable `5xx` responses with bounded exponential
+  backoff and respect `Retry-After`.
+- Prevent overlapping export runs with an expiring D1 lease. A stale lease may
+  be reclaimed after a bounded timeout.
+- A partially failed run records per-bet errors and returns a non-success
+  outcome to the Cron Worker. The next run retries failed and missing bets.
+- Re-running a completed week creates zero duplicate Notion records.
+
+Security threat model:
+
+- A forged trigger could exfiltrate friend-group data to an attacker-controlled
+  destination or consume Notion quota. Mitigate with a fixed server-side
+  destination, bearer-secret verification, `POST` only, no CORS permission,
+  bounded run concurrency, and generic response bodies.
+- A leaked Notion token could expose the connected workspace. Mitigate with a
+  least-privilege internal connection shared only with the Sidebet archive,
+  encrypted runtime secrets, redacted errors, and documented token rotation.
+- A malicious bet title or change note could become active Notion content.
+  Treat every field as plain rich text; never construct executable URLs,
+  mentions, embeds, or raw HTML from bet data.
+- A public repository could leak operational values. Add regression checks that
+  committed configuration contains variable names only and never secret
+  values.
+
+Implementation:
+
+- [ ] Connect Notion and create a private `Sidebet Matched Bets Archive`
+  database with the locked property schema.
+- [ ] Create a least-privilege Notion internal connection, share only the
+  archive database with it, and configure its token through Sites runtime
+  secrets.
+- [x] Add failing unit and route tests for canonical export payloads, omission
+  of emails, stable hashes, Notion create/update/unchanged behavior,
+  pagination, retry handling, overlapping-run rejection, and secret
+  authorization.
+- [x] Add `notion_bet_exports` and `notion_export_runs` to the Drizzle schema
+  and runtime schema initialization; generate and inspect a non-destructive D1
+  migration.
+- [x] Implement a dedicated matched-bet export query containing active terms,
+  frozen legs, results, and the full immutable revision timeline without the
+  UI query's 100-row limit.
+- [x] Implement a typed Notion client pinned to API version `2026-03-11`, with
+  bounded pagination, timeouts, retry/backoff, plain-text serialization, and
+  redacted errors.
+- [x] Implement idempotent per-bet page creation and updates keyed by
+  `Sidebet Bet ID`, plus payload-hash skipping and export-run accounting.
+- [x] Add `POST /api/internal/notion-export` with constant-time bearer-secret
+  validation, an expiring D1 run lease, generic count-only responses, and no
+  authenticated-user dependency.
+- [x] Add `scheduler/index.ts` and `wrangler.scheduler.jsonc` for a separate
+  Cloudflare Cron Worker that invokes the internal endpoint weekly and fails
+  observably on non-success responses.
+- [x] Add local scripts and documentation for testing the scheduled handler,
+  rotating secrets, manually triggering a reconciliation, inspecting run
+  history, and recovering after a partial export.
+- [x] Run unit tests, rendered-output tests, lint, strict type checking,
+  migration generation, the production build, and local scheduled-handler
+  simulation.
+- [ ] Configure the Sites secrets and Notion data-source ID without exposing
+  their values, deploy the verified app version, and perform an initial full
+  backfill.
+- [ ] Re-run the export and verify every D1 bet ID has exactly one Notion
+  record and the second run reports only unchanged records.
+- [ ] Deploy the Cron Worker to the owner's Cloudflare account, verify the
+  weekly trigger is registered, manually test one invocation, and confirm its
+  run appears in both Cloudflare logs and `notion_export_runs`.
+- [x] Update `README.md` and `CONTRIBUTING.md` to distinguish the Notion
+  matched-bet archive from a complete disaster-recovery backup.
+
+Acceptance:
+
+- Every matched bet has exactly one Notion record keyed by its Sidebet bet ID.
+- A weekly run updates settled status or accepted bet revisions without
+  duplicating the record.
+- Active terms and the full revision history in Notion match the immutable D1
+  records.
+- No Notion record contains an identity email address or secret.
+- An unauthorized or overlapping export request writes nothing.
+- Temporary Notion throttling or service failure is recorded and retried on a
+  later run without losing or duplicating matched bets.
+- The Cron scheduler is owned independently from the Sites project and can
+  invoke a manual reconciliation in addition to its weekly schedule.
+- Existing authentication, betting, editing, settlement, and public-audit
+  behavior remains unchanged.
 
 ## Required verification
 

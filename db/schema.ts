@@ -411,3 +411,49 @@ export const auditEvents = sqliteTable(
     index("audit_created_idx").on(table.createdAt),
   ],
 );
+
+export const notionBetExports = sqliteTable(
+  "notion_bet_exports",
+  {
+    betId: text("bet_id")
+      .primaryKey()
+      .references(() => bets.id),
+    notionPageId: text("notion_page_id"),
+    payloadHash: text("payload_hash"),
+    lastExportedAt: text("last_exported_at"),
+    lastError: text("last_error"),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (table) => [
+    uniqueIndex("notion_bet_exports_page_unique")
+      .on(table.notionPageId)
+      .where(sql`${table.notionPageId} IS NOT NULL`),
+  ],
+);
+
+export const notionExportRuns = sqliteTable(
+  "notion_export_runs",
+  {
+    id: text("id").primaryKey(),
+    status: text("status").notNull().default("running"),
+    startedAt: text("started_at").notNull().default(now),
+    finishedAt: text("finished_at"),
+    leaseExpiresAt: text("lease_expires_at").notNull(),
+    scannedCount: integer("scanned_count").notNull().default(0),
+    createdCount: integer("created_count").notNull().default(0),
+    updatedCount: integer("updated_count").notNull().default(0),
+    unchangedCount: integer("unchanged_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    error: text("error"),
+  },
+  (table) => [
+    uniqueIndex("notion_export_runs_one_running")
+      .on(table.status)
+      .where(sql`${table.status} = 'running'`),
+    index("notion_export_runs_started_idx").on(table.startedAt),
+    check(
+      "notion_export_runs_status_check",
+      sql`${table.status} IN ('running', 'succeeded', 'partial', 'failed')`,
+    ),
+  ],
+);

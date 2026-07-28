@@ -73,3 +73,14 @@ database. The schema lives in `db/schema.ts`; generated SQL migrations live in
 `drizzle/`.
 
 Production hosting is configured through `.openai/hosting.json`.
+
+## Weekly Notion archive
+
+Matched bets can also be upserted into a private Notion database each Sunday.
+This human-readable archive includes frozen legs and complete matched-bet
+revision history, but it is not a full backup of D1.
+
+See [docs/notion-archive.md](./docs/notion-archive.md) for the locked schema,
+least-privilege setup, secret rotation, manual reconciliation, and scheduler
+deployment. No Notion token or trigger secret belongs in this public
+repository.
