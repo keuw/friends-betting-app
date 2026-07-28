@@ -56,6 +56,8 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
   normal flow and explain the next useful action.
 - Open/pending uses acid, resolved/confirmed uses blue, and
   rejected/cancelled/void uses coral-tinted red.
+- Large collection pickers stay height-bounded, begin with search and a small
+  result batch, and keep selected items visible outside the scrolling region.
 
 ## Responsive behavior
 

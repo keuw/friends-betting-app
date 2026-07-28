@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 6 implemented, verified, and published
+**Status:** Phase 7 implemented, verified, and published
 
 ## Product contract
 
@@ -322,6 +322,58 @@ Acceptance:
 - Concurrent acceptance still produces exactly one matched bet.
 - Creator-authored markets, offers, acceptances, and resolutions remain public
   in the signed-in activity ledger.
+
+### Phase 7 — Leg deadlines and scalable market discovery
+
+Make every parlay leg's betting deadline explicit and keep the offer composer
+usable when the group has dozens or hundreds of open markets. The chooser stays
+bounded instead of making the Board page grow indefinitely.
+
+Interaction contract:
+
+- Every draft leg, posted-offer leg, and matched-bet leg shows its market's
+  betting close date and time.
+- Open markets remain ordered by the earliest closing time first.
+- The composer searches market questions, outcomes, and creator names.
+- The first eight matching markets appear initially; `Show more` reveals the
+  next eight without losing the search query or selected legs.
+- Selected legs appear in a compact pinned bet slip above the market browser
+  and can be removed there.
+- The existing eight-leg server maximum is explained and enforced in the
+  interface before submission.
+- The desktop market browser remains height-bounded. Mobile uses progressive
+  batches so the user does not fight a nested full-page scroll.
+
+Implementation:
+
+- [x] Add a failing production regression test for the per-leg closing-time
+  contract and large-market discovery controls.
+- [x] Add `marketClosesAt` to the offer-leg view contract and populate it from
+  the existing `markets.closes_at` field; no schema migration is required.
+- [x] Show a semantic `<time>` value on composer choices, selected legs, posted
+  offers, and matched bets.
+- [x] Add market search, match counts, eight-item progressive disclosure, and
+  useful no-results copy.
+- [x] Add a pinned selected-leg slip with removal controls and clear eight-leg
+  limit feedback.
+- [x] Tune desktop and mobile layouts without changing offer, parlay,
+  counteroffer, settlement, or acceptance semantics.
+- [x] Update the design documentation for bounded collection pickers.
+- [x] Run tests, lint, strict type checking, migration generation, and the
+  production build.
+- [x] Exercise a local multi-market parlay through the API and verify each leg
+  returns its own closing time.
+- [x] Commit, push, publish a new Sites version, and verify the production URL.
+
+Acceptance:
+
+- Friends can see exactly when betting closes for each leg before and after an
+  offer is matched.
+- A long market list never makes the composer grow without a bound.
+- Search and progressive disclosure work without clearing selected legs.
+- Keyboard and touch users can search, choose, inspect, and remove legs.
+- Existing eight-leg, earliest-expiry, atomic acceptance, and parlay grading
+  rules continue to pass.
 
 ## Required verification
 

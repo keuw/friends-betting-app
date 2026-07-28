@@ -59,6 +59,7 @@ type OfferLegRow = {
   offer_id: string;
   market_id: string;
   market_question: string;
+  market_closes_at: string;
   selection_a: string;
   selection_b: string;
   maker_selection: Selection;
@@ -248,7 +249,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     db.prepare(
       `SELECT l.offer_id, l.market_id, l.maker_selection,
               m.question AS market_question, m.selection_a, m.selection_b,
-              m.status AS market_status
+              m.closes_at AS market_closes_at, m.status AS market_status
        FROM offer_legs l
        JOIN markets m ON m.id = l.market_id
        ORDER BY l.offer_id, m.closes_at`,
@@ -1420,6 +1421,7 @@ function toLegViews(rowsForOffer: OfferLegRow[]) {
   return rowsForOffer.map((leg) => ({
     marketId: leg.market_id,
     marketQuestion: leg.market_question,
+    marketClosesAt: leg.market_closes_at,
     makerSelection: leg.maker_selection,
     makerSelectionLabel:
       leg.maker_selection === "a" ? leg.selection_a : leg.selection_b,

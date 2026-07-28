@@ -4,6 +4,18 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
+async function readClientBundle() {
+  const clientAssetDirectory = new URL("dist/client/assets/", root);
+  const clientAssetNames = await readdir(clientAssetDirectory);
+  return (
+    await Promise.all(
+      clientAssetNames
+        .filter((name) => name.endsWith(".js"))
+        .map((name) => readFile(new URL(name, clientAssetDirectory), "utf8")),
+    )
+  ).join("\n");
+}
+
 test("production bundle contains the Sidebet public experience", async () => {
   const bundle = await readFile(new URL("dist/server/index.js", root), "utf8");
 
@@ -44,17 +56,22 @@ test("market creators can participate in offers on their own markets", async () 
     new URL("dist/server/index.js", root),
     "utf8",
   );
-  const clientAssetDirectory = new URL("dist/client/assets/", root);
-  const clientAssetNames = await readdir(clientAssetDirectory);
-  const clientBundle = (
-    await Promise.all(
-      clientAssetNames
-        .filter((name) => name.endsWith(".js"))
-        .map((name) => readFile(new URL(name, clientAssetDirectory), "utf8")),
-    )
-  ).join("\n");
+  const clientBundle = await readClientBundle();
 
   assert.match(clientBundle, /Market creators can place offers too/);
   assert.doesNotMatch(serverBundle, /ORACLE_CONFLICT/);
   assert.doesNotMatch(clientBundle, /cannot bet on a market you created/i);
+});
+
+test("parlay legs expose deadlines and the market picker stays manageable", async () => {
+  const [serverBundle, clientBundle] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+  ]);
+
+  assert.match(serverBundle, /marketClosesAt/);
+  assert.match(clientBundle, /Search markets/);
+  assert.match(clientBundle, /Selected legs/);
+  assert.match(clientBundle, /Show more markets/);
+  assert.match(clientBundle, /Up to 8 legs/);
 });

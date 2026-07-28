@@ -20,6 +20,9 @@ import { americanOdds } from "@/lib/domain";
 
 type Tab = "board" | "bets" | "settle" | "markets";
 
+const MAX_PARLAY_LEGS = 8;
+const MARKET_BATCH_SIZE = 8;
+
 export function BettingApp({
   viewer,
   signOutPath,
@@ -341,16 +344,63 @@ function OfferComposer({
       | ((current: Record<string, Selection>) => Record<string, Selection>),
   ) => void;
 }) {
-  const availableMarkets = markets.filter((market) => market.status === "open");
+  const availableMarkets = markets
+    .filter((market) => market.status === "open")
+    .sort(
+      (left, right) =>
+        new Date(left.closesAt).getTime() -
+        new Date(right.closesAt).getTime(),
+    );
   const [makerRisk, setMakerRisk] = useState("20");
   const [takerRisk, setTakerRisk] = useState("20");
+  const [marketQuery, setMarketQuery] = useState("");
+  const [visibleMarketCount, setVisibleMarketCount] =
+    useState(MARKET_BATCH_SIZE);
   const selectedCount = Object.keys(selections).length;
+  const selectedMarkets = markets
+    .filter((market) => selections[market.id])
+    .sort(
+      (left, right) =>
+        new Date(left.closesAt).getTime() -
+        new Date(right.closesAt).getTime(),
+    );
+  const normalizedQuery = marketQuery.trim().toLocaleLowerCase();
+  const matchingMarkets = availableMarkets.filter((market) => {
+    if (!normalizedQuery) return true;
+    return [
+      market.question,
+      market.selectionA,
+      market.selectionB,
+      market.creatorName,
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+  });
+  const visibleMarkets = matchingMarkets.slice(0, visibleMarketCount);
+  const remainingMarketCount = matchingMarkets.length - visibleMarkets.length;
   const makerRiskCents = toCents(makerRisk);
   const takerRiskCents = toCents(takerRisk);
   const odds =
     makerRiskCents > 0 && takerRiskCents > 0
       ? americanOdds(makerRiskCents, takerRiskCents)
       : null;
+
+  function chooseSelection(marketId: string, selection: Selection) {
+    onSelectionsChange((current) => {
+      const isNewLeg = current[marketId] === undefined;
+      if (isNewLeg && Object.keys(current).length >= MAX_PARLAY_LEGS) {
+        return current;
+      }
+      return toggleSelection(current, marketId, selection);
+    });
+  }
+
+  function removeSelection(marketId: string) {
+    onSelectionsChange((current) => {
+      if (current[marketId] === undefined) return current;
+      const next = { ...current };
+      delete next[marketId];
+      return next;
+    });
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -392,40 +442,136 @@ function OfferComposer({
         </div>
       ) : (
         <form onSubmit={submit}>
-          <div className="market-picker">
-            {availableMarkets.map((market, index) => (
-              <div className="market-choice" key={market.id}>
-                <div className="market-choice-head">
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <p>{market.question}</p>
-                </div>
-                <div className="side-toggle">
-                  <button
-                    type="button"
-                    className={selections[market.id] === "a" ? "selected" : ""}
-                    onClick={() =>
-                      onSelectionsChange((current) =>
-                        toggleSelection(current, market.id, "a"),
-                      )
-                    }
-                  >
-                    {market.selectionA}
-                  </button>
-                  <button
-                    type="button"
-                    className={selections[market.id] === "b" ? "selected" : ""}
-                    onClick={() =>
-                      onSelectionsChange((current) =>
-                        toggleSelection(current, market.id, "b"),
-                      )
-                    }
-                  >
-                    {market.selectionB}
-                  </button>
-                </div>
+          {selectedMarkets.length > 0 && (
+            <section
+              className="selected-slip"
+              aria-labelledby="selected-legs-title"
+            >
+              <div className="selected-slip-head">
+                <span id="selected-legs-title">Selected legs</span>
+                <b>
+                  {selectedCount}/{MAX_PARLAY_LEGS}
+                </b>
               </div>
-            ))}
+              <div className="selected-slip-list">
+                {selectedMarkets.map((market) => {
+                  const selection = selections[market.id];
+                  const selectionLabel =
+                    selection === "a"
+                      ? market.selectionA
+                      : market.selectionB;
+                  return (
+                    <div className="selected-slip-leg" key={market.id}>
+                      <div>
+                        <strong>{selectionLabel}</strong>
+                        <p>{market.question}</p>
+                        <BettingDeadline value={market.closesAt} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSelection(market.id)}
+                        aria-label={`Remove ${selectionLabel} from your bet`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          <div className="market-browser-tools">
+            <label className="market-search">
+              <span>Search markets</span>
+              <input
+                type="search"
+                value={marketQuery}
+                onChange={(event) => {
+                  setMarketQuery(event.target.value);
+                  setVisibleMarketCount(MARKET_BATCH_SIZE);
+                }}
+                placeholder="Question, outcome, or creator"
+              />
+            </label>
+            <div className="market-result-meta">
+              <span>
+                {matchingMarkets.length}{" "}
+                {matchingMarkets.length === 1 ? "match" : "matches"}
+              </span>
+              <span>Up to 8 legs</span>
+            </div>
           </div>
+
+          <div className="market-picker">
+            {visibleMarkets.length === 0 ? (
+              <div className="market-search-empty">
+                <strong>No markets found</strong>
+                <p>Try another question, outcome, or friend&apos;s name.</p>
+              </div>
+            ) : (
+              visibleMarkets.map((market, index) => {
+                const newLegDisabled =
+                  selectedCount >= MAX_PARLAY_LEGS && !selections[market.id];
+                return (
+                  <div className="market-choice" key={market.id}>
+                    <div className="market-choice-head">
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <div>
+                        <p>{market.question}</p>
+                        <BettingDeadline value={market.closesAt} />
+                      </div>
+                    </div>
+                    <div className="side-toggle">
+                      <button
+                        type="button"
+                        className={
+                          selections[market.id] === "a" ? "selected" : ""
+                        }
+                        aria-pressed={selections[market.id] === "a"}
+                        disabled={busy !== null || newLegDisabled}
+                        onClick={() => chooseSelection(market.id, "a")}
+                      >
+                        {market.selectionA}
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          selections[market.id] === "b" ? "selected" : ""
+                        }
+                        aria-pressed={selections[market.id] === "b"}
+                        disabled={busy !== null || newLegDisabled}
+                        onClick={() => chooseSelection(market.id, "b")}
+                      >
+                        {market.selectionB}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {remainingMarketCount > 0 && (
+            <button
+              className="show-more-markets"
+              type="button"
+              onClick={() =>
+                setVisibleMarketCount(
+                  (current) => current + MARKET_BATCH_SIZE,
+                )
+              }
+            >
+              Show more markets
+              <span>
+                +{Math.min(MARKET_BATCH_SIZE, remainingMarketCount)}
+              </span>
+            </button>
+          )}
+          {selectedCount >= MAX_PARLAY_LEGS && (
+            <p className="leg-limit-note" role="status">
+              Eight-leg limit reached. Remove a selected leg to choose another.
+            </p>
+          )}
 
           <div className="terms-editor">
             <MoneyInput
@@ -505,7 +651,10 @@ function OfferCard({
           <div className="offer-leg" key={`${offer.id}-${leg.marketId}`}>
             <span>{String(index + 1).padStart(2, "0")}</span>
             <div>
-              <p>{leg.marketQuestion}</p>
+              <div>
+                <p>{leg.marketQuestion}</p>
+                <BettingDeadline value={leg.marketClosesAt} />
+              </div>
               <strong>{leg.makerSelectionLabel}</strong>
             </div>
           </div>
@@ -760,6 +909,7 @@ function BetsTab({ state }: { state: AppState }) {
                   <div key={`${bet.id}-${leg.marketId}`}>
                     <span>{leg.makerSelectionLabel}</span>
                     <p>{leg.marketQuestion}</p>
+                    <BettingDeadline value={leg.marketClosesAt} />
                   </div>
                 ))}
               </div>
@@ -1262,6 +1412,14 @@ function MoneyInput({
         />
       </div>
     </label>
+  );
+}
+
+function BettingDeadline({ value }: { value: string }) {
+  return (
+    <time className="betting-deadline" dateTime={value}>
+      Closes {dateTime(value)}
+    </time>
   );
 }
 

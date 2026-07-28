@@ -30,6 +30,7 @@ export type MarketView = {
 export type OfferLegView = {
   marketId: string;
   marketQuestion: string;
+  marketClosesAt: string;
   makerSelection: Selection;
   makerSelectionLabel: string;
   marketStatus: MarketStatus;
