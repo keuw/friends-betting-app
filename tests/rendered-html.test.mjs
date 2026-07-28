@@ -16,6 +16,19 @@ async function readClientBundle() {
   ).join("\n");
 }
 
+async function readMigrations() {
+  const migrationDirectory = new URL("../drizzle/", import.meta.url);
+  const migrationNames = await readdir(migrationDirectory);
+  return (
+    await Promise.all(
+      migrationNames
+        .filter((name) => name.endsWith(".sql"))
+        .sort()
+        .map((name) => readFile(new URL(name, migrationDirectory), "utf8")),
+    )
+  ).join("\n");
+}
+
 test("production bundle contains the Sidebet public experience", async () => {
   const bundle = await readFile(new URL("dist/server/index.js", root), "utf8");
 
@@ -93,4 +106,29 @@ test("All markets can be searched, filtered, and keeps its ledger order", async 
     /CASE m\.status WHEN 'open' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END/,
   );
   assert.match(serverBundle, /datetime\(m\.closes_at\) DESC/);
+});
+
+test("market and matched-bet edits preserve immutable revision history", async () => {
+  const [serverBundle, clientBundle, migrations] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readMigrations(),
+  ]);
+
+  assert.match(migrations, /CREATE TABLE `market_revisions`/);
+  assert.match(migrations, /CREATE TABLE `bet_revisions`/);
+  assert.match(migrations, /CREATE TABLE `bet_revision_legs`/);
+  assert.match(migrations, /bet_revisions_one_pending/);
+  assert.match(migrations, /bet_revisions_one_active/);
+  assert.match(serverBundle, /edit_market/);
+  assert.match(serverBundle, /propose_bet_revision/);
+  assert.match(serverBundle, /respond_bet_revision/);
+  assert.match(serverBundle, /cancel_bet_revision/);
+  assert.match(serverBundle, /MARKET_CHANGED/);
+  assert.match(serverBundle, /BET_REVISION_STALE/);
+  assert.match(clientBundle, /Edit market/);
+  assert.match(clientBundle, /Propose change/);
+  assert.match(clientBundle, /Revision history/);
+  assert.match(clientBundle, /Accept revision/);
+  assert.match(clientBundle, /Current terms stay active until your friend accepts/);
 });

@@ -42,6 +42,11 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - Accepting any branch consumes the root offer.
 - Market creators may participate in offers on markets they resolve; both the
   participation and resolution stay visible in the public activity ledger.
+- Market and matched-bet terms are append-only. Never update a revision in
+  place or repoint an existing offer to a newer market revision.
+- Only the market creator may publish a new market revision. A pending
+  matched-bet revision becomes active only after the other participant accepts
+  it, and both current and proposed legs must still be open.
 - Market resolution creates an immutable debt record.
 - Offline payment claims require confirmation from the other party.
 - The app never holds, transfers, or verifies money.

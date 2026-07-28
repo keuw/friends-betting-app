@@ -20,6 +20,13 @@ external method, both parties confirm the settlement in Sidebet.
 - The market creator acts as its resolver and may also make, counter, or accept
   offers on that market. Participation and resolution remain public to the
   group.
+- A market edit publishes a numbered revision instead of rewriting history.
+  Existing offers and matched bets keep the exact market version they already
+  reference, and each referenced version is resolved independently.
+- Either participant may propose new terms for a pending matched bet. The
+  current version remains active unless the other participant accepts the
+  complete proposal; rejected and cancelled proposals stay in the public
+  history without changing the bet.
 - Settled bets create pairwise debts. Reciprocal debts are netted before the app
   shows who owes whom.
 - Offline settlement proposals require confirmation from the other party.

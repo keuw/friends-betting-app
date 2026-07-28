@@ -10,7 +10,10 @@ import {
 import type {
   AppAction,
   AppState,
+  BetRevisionView,
+  BetView,
   CounterofferView,
+  MarketRevisionView,
   MarketStatus,
   MarketView,
   OfferView,
@@ -246,7 +249,9 @@ export function BettingApp({
               onSelectionsChange={setOfferSelections}
             />
           )}
-          {tab === "bets" && <BetsTab state={state} />}
+          {tab === "bets" && (
+            <BetsTab state={state} busy={busy} onAction={runAction} />
+          )}
           {tab === "settle" && (
             <SettleTab state={state} busy={busy} onAction={runAction} />
           )}
@@ -426,6 +431,9 @@ function OfferComposer({
         takerRiskCents,
         legs: Object.entries(selections).map(([marketId, selection]) => ({
           marketId,
+          marketRevisionId:
+            markets.find((market) => market.id === marketId)
+              ?.currentRevisionId ?? "",
           selection,
         })),
       },
@@ -668,6 +676,9 @@ function OfferCard({
               <div>
                 <p>{leg.marketQuestion}</p>
                 <BettingDeadline value={leg.marketClosesAt} />
+                <span className="revision-tag">
+                  Market v{leg.marketRevisionNumber}
+                </span>
               </div>
               <strong>{leg.makerSelectionLabel}</strong>
             </div>
@@ -889,7 +900,15 @@ function CounterForm({
   );
 }
 
-function BetsTab({ state }: { state: AppState }) {
+function BetsTab({
+  state,
+  busy,
+  onAction,
+}: {
+  state: AppState;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+}) {
   return (
     <section className="single-column">
       <div className="section-heading large">
@@ -907,45 +926,501 @@ function BetsTab({ state }: { state: AppState }) {
       ) : (
         <div className="bets-grid">
           {state.bets.map((bet) => (
-            <article
-              className={`bet-card ${bet.isParticipant ? "mine" : ""}`}
+            <BetCard
               key={bet.id}
-            >
-              <div className="bet-status-line">
-                <StatusBadge status={bet.status} />
-                <span>{relativeTime(bet.acceptedAt)}</span>
-              </div>
-              <h3>
-                {bet.makerName} <span>vs</span> {bet.takerName}
-              </h3>
-              <div className="bet-leg-list">
-                {bet.legs.map((leg) => (
-                  <div key={`${bet.id}-${leg.marketId}`}>
-                    <span>{leg.makerSelectionLabel}</span>
-                    <p>{leg.marketQuestion}</p>
-                    <BettingDeadline value={leg.marketClosesAt} />
-                  </div>
-                ))}
-              </div>
-              <div className="bet-bottom">
-                <div>
-                  <span>{bet.makerName} risks</span>
-                  <b>{money(bet.makerRiskCents)}</b>
-                </div>
-                <div>
-                  <span>{bet.takerName} risks</span>
-                  <b>{money(bet.takerRiskCents)}</b>
-                </div>
-              </div>
-              {bet.isParticipant && (
-                <span className="participant-ribbon">
-                  YOUR SIDE: {bet.mySide?.toUpperCase()}
-                </span>
-              )}
-            </article>
+              bet={bet}
+              markets={state.markets}
+              busy={busy}
+              onAction={onAction}
+            />
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function BetCard({
+  bet,
+  markets,
+  busy,
+  onAction,
+}: {
+  bet: BetView;
+  markets: MarketView[];
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const pendingRevision = bet.revisions.find(
+    (revision) => revision.status === "pending",
+  );
+  const activeRevision = bet.revisions.find(
+    (revision) => revision.id === bet.currentRevisionId,
+  );
+
+  return (
+    <article className={`bet-card ${bet.isParticipant ? "mine" : ""}`}>
+      <div className="bet-status-line">
+        <div>
+          <StatusBadge status={bet.status} />
+          <span className="revision-tag">
+            Bet v{activeRevision?.revisionNumber ?? 1}
+          </span>
+        </div>
+        <span>{relativeTime(bet.acceptedAt)}</span>
+      </div>
+      <h3>
+        {bet.makerName} <span>vs</span> {bet.takerName}
+      </h3>
+      <BetLegList betId={bet.id} legs={bet.legs} />
+      <div className="bet-bottom">
+        <div>
+          <span>{bet.makerName} risks</span>
+          <b>{money(bet.makerRiskCents)}</b>
+        </div>
+        <div>
+          <span>{bet.takerName} risks</span>
+          <b>{money(bet.takerRiskCents)}</b>
+        </div>
+      </div>
+
+      {pendingRevision && (
+        <section className="revision-proposal" aria-label="Pending bet revision">
+          <div className="revision-proposal-head">
+            <div>
+              <span>CHANGE PROPOSED</span>
+              <strong>Revision {pendingRevision.revisionNumber}</strong>
+            </div>
+            <StatusBadge status={pendingRevision.status} />
+          </div>
+          <p className="revision-note">
+            “{pendingRevision.changeNote}” — {pendingRevision.proposerName}
+          </p>
+          <p className="revision-guardrail">
+            Current terms stay active until your friend accepts.
+          </p>
+          <div className="revision-comparison">
+            <BetTermsSummary
+              label="Current"
+              makerName={bet.makerName}
+              takerName={bet.takerName}
+              makerRiskCents={bet.makerRiskCents}
+              takerRiskCents={bet.takerRiskCents}
+              legs={bet.legs}
+            />
+            <BetTermsSummary
+              label="Proposed"
+              makerName={bet.makerName}
+              takerName={bet.takerName}
+              makerRiskCents={pendingRevision.makerRiskCents}
+              takerRiskCents={pendingRevision.takerRiskCents}
+              legs={pendingRevision.legs}
+            />
+          </div>
+          {(pendingRevision.canRespond || pendingRevision.canCancel) && (
+            <div className="revision-response-actions">
+              {pendingRevision.canRespond && (
+                <>
+                  <button
+                    type="button"
+                    className="button-accept"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void onAction(
+                        {
+                          type: "respond_bet_revision",
+                          betRevisionId: pendingRevision.id,
+                          decision: "accepted",
+                        },
+                        "Revision accepted. The updated terms are now active.",
+                      )
+                    }
+                  >
+                    Accept revision
+                  </button>
+                  <button
+                    type="button"
+                    className="button-quiet danger"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void onAction(
+                        {
+                          type: "respond_bet_revision",
+                          betRevisionId: pendingRevision.id,
+                          decision: "rejected",
+                        },
+                        "Revision rejected. The current terms stay active.",
+                      )
+                    }
+                  >
+                    Reject
+                  </button>
+                </>
+              )}
+              {pendingRevision.canCancel && (
+                <button
+                  type="button"
+                  className="button-quiet"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void onAction(
+                      {
+                        type: "cancel_bet_revision",
+                        betRevisionId: pendingRevision.id,
+                      },
+                      "Revision proposal cancelled.",
+                    )
+                  }
+                >
+                  Cancel proposal
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {editing && (
+        <BetRevisionEditor
+          bet={bet}
+          markets={markets}
+          busy={busy}
+          onAction={onAction}
+          onDone={() => setEditing(false)}
+        />
+      )}
+
+      <div className="bet-revision-actions">
+        {bet.canProposeRevision && !pendingRevision && (
+          <button
+            type="button"
+            className="button-dark"
+            disabled={busy !== null}
+            onClick={() => setEditing((current) => !current)}
+          >
+            {editing ? "Close editor" : "Propose change"}
+          </button>
+        )}
+        <button
+          type="button"
+          className="button-quiet"
+          aria-expanded={showHistory}
+          onClick={() => setShowHistory((current) => !current)}
+        >
+          Revision history ({bet.revisions.length})
+        </button>
+      </div>
+
+      {showHistory && (
+        <RevisionHistory
+          revisions={bet.revisions}
+          makerName={bet.makerName}
+          takerName={bet.takerName}
+          currentRevisionId={bet.currentRevisionId}
+        />
+      )}
+
+      {bet.isParticipant && (
+        <span className="participant-ribbon">
+          YOUR SIDE: {bet.mySide?.toUpperCase()}
+        </span>
+      )}
+    </article>
+  );
+}
+
+function BetRevisionEditor({
+  bet,
+  markets,
+  busy,
+  onAction,
+  onDone,
+}: {
+  bet: BetView;
+  markets: MarketView[];
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+  onDone: () => void;
+}) {
+  const [renderedAt] = useState(Date.now);
+  const [makerRisk, setMakerRisk] = useState(centsToInput(bet.makerRiskCents));
+  const [takerRisk, setTakerRisk] = useState(centsToInput(bet.takerRiskCents));
+  const [changeNote, setChangeNote] = useState("");
+  const [selections, setSelections] = useState<Record<string, Selection>>(
+    Object.fromEntries(
+      bet.legs.map((leg) => [leg.marketId, leg.makerSelection]),
+    ),
+  );
+  const availableMarkets = markets
+    .filter(
+      (market) =>
+        market.status === "open" &&
+        new Date(market.closesAt).getTime() > renderedAt,
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.closesAt).getTime() -
+        new Date(right.closesAt).getTime(),
+    );
+  const selectedCount = Object.keys(selections).length;
+
+  function chooseSelection(marketId: string, selection: Selection) {
+    setSelections((current) => {
+      const isNew = current[marketId] === undefined;
+      if (isNew && Object.keys(current).length >= MAX_PARLAY_LEGS) {
+        return current;
+      }
+      return toggleSelection(current, marketId, selection);
+    });
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const makerRiskCents = toCents(makerRisk);
+    const takerRiskCents = toCents(takerRisk);
+    const legs = Object.entries(selections).flatMap(
+      ([marketId, selection]) => {
+        const market = markets.find((item) => item.id === marketId);
+        return market
+          ? [
+              {
+                marketId,
+                marketRevisionId: market.currentRevisionId,
+                selection,
+              },
+            ]
+          : [];
+      },
+    );
+    if (
+      makerRiskCents < 1 ||
+      takerRiskCents < 1 ||
+      legs.length === 0 ||
+      changeNote.trim().length < 3
+    ) {
+      return;
+    }
+    await onAction(
+      {
+        type: "propose_bet_revision",
+        betId: bet.id,
+        makerRiskCents,
+        takerRiskCents,
+        changeNote,
+        legs,
+      },
+      "Change proposed. The current terms stay active until your friend accepts.",
+    );
+    onDone();
+  }
+
+  return (
+    <form className="bet-revision-editor" onSubmit={submit}>
+      <div className="revision-editor-head">
+        <div>
+          <span>PROPOSE REVISION</span>
+          <h4>Rewrite the agreement together</h4>
+        </div>
+        <span>{selectedCount}/{MAX_PARLAY_LEGS} legs</span>
+      </div>
+      <p>
+        Your friend must accept the complete revision. Every prior version
+        remains visible.
+      </p>
+      <div className="terms-editor revision-terms">
+        <MoneyInput
+          label={`${bet.makerName} risks`}
+          value={makerRisk}
+          onChange={setMakerRisk}
+          compact
+        />
+        <span className="terms-divider">VS</span>
+        <MoneyInput
+          label={`${bet.takerName} risks`}
+          value={takerRisk}
+          onChange={setTakerRisk}
+          compact
+        />
+      </div>
+      <label className="revision-change-note">
+        <span>Why are you changing it?</span>
+        <textarea
+          value={changeNote}
+          onChange={(event) => setChangeNote(event.target.value)}
+          placeholder="Corrected the deadline and added the second leg."
+          minLength={3}
+          maxLength={200}
+          required
+        />
+      </label>
+      <div className="revision-market-list">
+        {availableMarkets.map((market) => (
+          <div className="revision-market-option" key={market.id}>
+            <div>
+              <strong>{market.question}</strong>
+              <BettingDeadline value={market.closesAt} />
+              <span className="revision-tag">
+                Market v{market.revisionNumber}
+              </span>
+            </div>
+            <div className="side-toggle">
+              <button
+                type="button"
+                className={selections[market.id] === "a" ? "selected" : ""}
+                aria-pressed={selections[market.id] === "a"}
+                disabled={
+                  busy !== null ||
+                  (selectedCount >= MAX_PARLAY_LEGS &&
+                    selections[market.id] === undefined)
+                }
+                onClick={() => chooseSelection(market.id, "a")}
+              >
+                {market.selectionA}
+              </button>
+              <button
+                type="button"
+                className={selections[market.id] === "b" ? "selected" : ""}
+                aria-pressed={selections[market.id] === "b"}
+                disabled={
+                  busy !== null ||
+                  (selectedCount >= MAX_PARLAY_LEGS &&
+                    selections[market.id] === undefined)
+                }
+                onClick={() => chooseSelection(market.id, "b")}
+              >
+                {market.selectionB}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="revision-editor-actions">
+        <button
+          type="submit"
+          className="button-accept"
+          disabled={
+            busy !== null ||
+            selectedCount === 0 ||
+            toCents(makerRisk) < 1 ||
+            toCents(takerRisk) < 1 ||
+            changeNote.trim().length < 3
+          }
+        >
+          Send revision for approval
+        </button>
+        <button type="button" className="button-quiet" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function BetLegList({
+  betId,
+  legs,
+}: {
+  betId: string;
+  legs: BetView["legs"];
+}) {
+  return (
+    <div className="bet-leg-list">
+      {legs.map((leg) => (
+        <div key={`${betId}-${leg.marketRevisionId}`}>
+          <span>{leg.makerSelectionLabel}</span>
+          <p>{leg.marketQuestion}</p>
+          <BettingDeadline value={leg.marketClosesAt} />
+          <span className="revision-tag">
+            Market v{leg.marketRevisionNumber}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BetTermsSummary({
+  label,
+  makerName,
+  takerName,
+  makerRiskCents,
+  takerRiskCents,
+  legs,
+}: {
+  label: string;
+  makerName: string;
+  takerName: string;
+  makerRiskCents: number;
+  takerRiskCents: number;
+  legs: BetView["legs"];
+}) {
+  return (
+    <div className="bet-terms-summary">
+      <span>{label}</span>
+      <strong>
+        {money(makerRiskCents)} ↔ {money(takerRiskCents)}
+      </strong>
+      <small>
+        {makerName} / {takerName}
+      </small>
+      <ul>
+        {legs.map((leg) => (
+          <li key={`${label}-${leg.marketRevisionId}`}>
+            {leg.makerSelectionLabel} · {leg.marketQuestion} · v
+            {leg.marketRevisionNumber}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RevisionHistory({
+  revisions,
+  makerName,
+  takerName,
+  currentRevisionId,
+}: {
+  revisions: BetRevisionView[];
+  makerName: string;
+  takerName: string;
+  currentRevisionId: string;
+}) {
+  return (
+    <section className="revision-history" aria-label="Revision history">
+      <div className="revision-history-head">
+        <span>Revision history</span>
+        <small>Append-only · visible to the group</small>
+      </div>
+      {revisions.map((revision) => (
+        <div className="revision-history-row" key={revision.id}>
+          <div>
+            <strong>v{revision.revisionNumber}</strong>
+            <StatusBadge
+              status={
+                revision.id === currentRevisionId
+                  ? "active"
+                  : revision.status
+              }
+            />
+          </div>
+          <p>{revision.changeNote}</p>
+          <small>
+            Proposed by {revision.proposerName} for {revision.recipientName} ·{" "}
+            {relativeTime(revision.createdAt)}
+          </small>
+          <BetTermsSummary
+            label={`Revision ${revision.revisionNumber}`}
+            makerName={makerName}
+            takerName={takerName}
+            makerRiskCents={revision.makerRiskCents}
+            takerRiskCents={revision.takerRiskCents}
+            legs={revision.legs}
+          />
+        </div>
+      ))}
     </section>
   );
 }
@@ -1330,105 +1805,13 @@ function MarketsTab({
             ) : (
               <div className="market-list">
                 {filteredMarkets.map((market) => (
-                  <article className="market-row" key={market.id}>
-                    <div className="market-state">
-                      <StatusBadge status={market.status} />
-                      <span>by {market.creatorName}</span>
-                    </div>
-                    <h3>{market.question}</h3>
-                    {market.description && <p>{market.description}</p>}
-                    <div className="market-sides">
-                      <span
-                        className={
-                          market.winningSelection === "a" ? "winner" : ""
-                        }
-                      >
-                        A · {market.selectionA}
-                      </span>
-                      <span
-                        className={
-                          market.winningSelection === "b" ? "winner" : ""
-                        }
-                      >
-                        B · {market.selectionB}
-                      </span>
-                    </div>
-                    {market.status === "open" && (
-                      <div className="market-offer-actions">
-                        <span>Put your name on it</span>
-                        <button
-                          type="button"
-                          disabled={busy !== null}
-                          onClick={() => onCreateOffer(market.id, "a")}
-                        >
-                          Offer on {market.selectionA}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy !== null}
-                          onClick={() => onCreateOffer(market.id, "b")}
-                        >
-                          Offer on {market.selectionB}
-                        </button>
-                      </div>
-                    )}
-                    <div className="market-row-footer">
-                      <span>Closes {dateTime(market.closesAt)}</span>
-                      {market.createdByMe && market.status === "open" && (
-                        <div className="resolve-actions">
-                          <button
-                            type="button"
-                            disabled={busy !== null}
-                            onClick={() =>
-                              void onAction(
-                                {
-                                  type: "resolve_market",
-                                  marketId: market.id,
-                                  result: "a",
-                                },
-                                `${market.selectionA} recorded as the winner.`,
-                              )
-                            }
-                          >
-                            {market.selectionA} won
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy !== null}
-                            onClick={() =>
-                              void onAction(
-                                {
-                                  type: "resolve_market",
-                                  marketId: market.id,
-                                  result: "b",
-                                },
-                                `${market.selectionB} recorded as the winner.`,
-                              )
-                            }
-                          >
-                            {market.selectionB} won
-                          </button>
-                          <button
-                            type="button"
-                            className="danger"
-                            disabled={busy !== null}
-                            onClick={() =>
-                              void onAction(
-                                {
-                                  type: "resolve_market",
-                                  marketId: market.id,
-                                  result: "void",
-                                },
-                                "Market voided.",
-                              )
-                            }
-                          >
-                            Void
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </article>
+                  <MarketCard
+                    key={market.id}
+                    market={market}
+                    busy={busy}
+                    onAction={onAction}
+                    onCreateOffer={onCreateOffer}
+                  />
                 ))}
               </div>
             )}
@@ -1436,6 +1819,423 @@ function MarketsTab({
         )}
       </div>
     </section>
+  );
+}
+
+function MarketCard({
+  market,
+  busy,
+  onAction,
+  onCreateOffer,
+}: {
+  market: MarketView;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+  onCreateOffer: (marketId: string, selection: Selection) => void;
+}) {
+  const [renderedAt] = useState(Date.now);
+  const [editing, setEditing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const currentRevision =
+    market.revisions.find((revision) => revision.isCurrent) ??
+    market.revisions[0];
+  const canEdit =
+    market.createdByMe &&
+    market.status === "open" &&
+    new Date(market.closesAt).getTime() > renderedAt;
+
+  return (
+    <article className="market-row">
+      <div className="market-state">
+        <StatusBadge status={market.status} />
+        <span className="revision-tag">Market v{market.revisionNumber}</span>
+        <span>by {market.creatorName}</span>
+      </div>
+      <h3>{market.question}</h3>
+      {market.description && <p>{market.description}</p>}
+      <div className="market-sides">
+        <span className={market.winningSelection === "a" ? "winner" : ""}>
+          A · {market.selectionA}
+        </span>
+        <span className={market.winningSelection === "b" ? "winner" : ""}>
+          B · {market.selectionB}
+        </span>
+      </div>
+
+      {market.status === "open" && (
+        <div className="market-offer-actions">
+          <span>Put your name on it</span>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => onCreateOffer(market.id, "a")}
+          >
+            Offer on {market.selectionA}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => onCreateOffer(market.id, "b")}
+          >
+            Offer on {market.selectionB}
+          </button>
+        </div>
+      )}
+
+      {editing && currentRevision && (
+        <MarketEditForm
+          market={market}
+          revision={currentRevision}
+          busy={busy}
+          onAction={onAction}
+          onDone={() => setEditing(false)}
+        />
+      )}
+
+      <div className="market-row-footer">
+        <span>Closes {dateTime(market.closesAt)}</span>
+        <div className="market-row-controls">
+          {canEdit && (
+            <button
+              type="button"
+              className="button-quiet"
+              disabled={busy !== null}
+              onClick={() => setEditing((current) => !current)}
+            >
+              {editing ? "Close editor" : "Edit market"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="button-quiet"
+            aria-expanded={showHistory}
+            onClick={() => setShowHistory((current) => !current)}
+          >
+            Revision history ({market.revisions.length})
+          </button>
+        </div>
+      </div>
+
+      {currentRevision?.canResolve && (
+        <MarketRevisionResolveActions
+          marketId={market.id}
+          revision={currentRevision}
+          busy={busy}
+          onAction={onAction}
+        />
+      )}
+
+      {showHistory && (
+        <MarketRevisionHistory
+          market={market}
+          busy={busy}
+          onAction={onAction}
+        />
+      )}
+    </article>
+  );
+}
+
+function MarketEditForm({
+  market,
+  revision,
+  busy,
+  onAction,
+  onDone,
+}: {
+  market: MarketView;
+  revision: MarketRevisionView;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+  onDone: () => void;
+}) {
+  const [question, setQuestion] = useState(revision.question);
+  const [description, setDescription] = useState(revision.description);
+  const [selectionA, setSelectionA] = useState(revision.selectionA);
+  const [selectionB, setSelectionB] = useState(revision.selectionB);
+  const [closesAt, setClosesAt] = useState(
+    toDateTimeInput(revision.closesAt),
+  );
+  const [changeNote, setChangeNote] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await onAction(
+      {
+        type: "edit_market",
+        marketId: market.id,
+        baseRevisionId: revision.id,
+        question,
+        description,
+        selectionA,
+        selectionB,
+        closesAt: new Date(closesAt).toISOString(),
+        changeNote,
+      },
+      "New market revision published. Existing offers and bets kept their original terms.",
+    );
+    onDone();
+  }
+
+  return (
+    <form className="market-edit-form" onSubmit={submit}>
+      <div className="revision-editor-head">
+        <div>
+          <span>EDIT MARKET</span>
+          <h4>Create version {revision.revisionNumber + 1}</h4>
+        </div>
+        <span>v{revision.revisionNumber} stays public</span>
+      </div>
+      <p>
+        This creates a new version. Existing offers and matched bets keep the
+        exact revision they already reference.
+      </p>
+      <label>
+        <span>The question</span>
+        <textarea
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          minLength={5}
+          maxLength={160}
+          required
+        />
+      </label>
+      <label>
+        <span>Context (optional)</span>
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          maxLength={500}
+        />
+      </label>
+      <div className="two-field">
+        <label>
+          <span>Side A</span>
+          <input
+            value={selectionA}
+            onChange={(event) => setSelectionA(event.target.value)}
+            maxLength={60}
+            required
+          />
+        </label>
+        <label>
+          <span>Side B</span>
+          <input
+            value={selectionB}
+            onChange={(event) => setSelectionB(event.target.value)}
+            maxLength={60}
+            required
+          />
+        </label>
+      </div>
+      <label>
+        <span>Betting closes</span>
+        <input
+          type="datetime-local"
+          value={closesAt}
+          onChange={(event) => setClosesAt(event.target.value)}
+          required
+        />
+      </label>
+      <label>
+        <span>Change note</span>
+        <textarea
+          value={changeNote}
+          onChange={(event) => setChangeNote(event.target.value)}
+          placeholder="Explain the correction so everyone can audit it."
+          minLength={3}
+          maxLength={200}
+          required
+        />
+      </label>
+      <div className="revision-editor-actions">
+        <button
+          type="submit"
+          className="button-accept"
+          disabled={
+            busy !== null ||
+            question.trim().length < 5 ||
+            changeNote.trim().length < 3
+          }
+        >
+          Publish new revision
+        </button>
+        <button type="button" className="button-quiet" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MarketRevisionHistory({
+  market,
+  busy,
+  onAction,
+}: {
+  market: MarketView;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+}) {
+  return (
+    <section className="revision-history market-revision-history">
+      <div className="revision-history-head">
+        <span>Revision history</span>
+        <small>Every version resolves independently</small>
+      </div>
+      {market.revisions.map((revision, index) => {
+        const previous = market.revisions[index + 1];
+        return (
+          <div className="revision-history-row" key={revision.id}>
+            <div>
+              <strong>v{revision.revisionNumber}</strong>
+              <StatusBadge status={revision.status} />
+              {revision.isCurrent && (
+                <span className="revision-tag">CURRENT</span>
+              )}
+            </div>
+            <p>{revision.changeNote}</p>
+            <small>
+              {revision.editorName} · {relativeTime(revision.createdAt)}
+            </small>
+            <MarketRevisionDiff revision={revision} previous={previous} />
+            {revision.canResolve && !revision.isCurrent && (
+              <MarketRevisionResolveActions
+                marketId={market.id}
+                revision={revision}
+                busy={busy}
+                onAction={onAction}
+              />
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function MarketRevisionDiff({
+  revision,
+  previous,
+}: {
+  revision: MarketRevisionView;
+  previous?: MarketRevisionView;
+}) {
+  const changes = previous
+    ? [
+        ["Question", previous.question, revision.question],
+        ["Context", previous.description || "—", revision.description || "—"],
+        ["Side A", previous.selectionA, revision.selectionA],
+        ["Side B", previous.selectionB, revision.selectionB],
+        [
+          "Closes",
+          dateTime(previous.closesAt),
+          dateTime(revision.closesAt),
+        ],
+      ].filter(([, before, after]) => before !== after)
+    : [];
+
+  if (!previous) {
+    return (
+      <div className="market-revision-snapshot">
+        <strong>{revision.question}</strong>
+        <span>
+          {revision.selectionA} / {revision.selectionB}
+        </span>
+        <BettingDeadline value={revision.closesAt} />
+      </div>
+    );
+  }
+
+  return (
+    <dl className="revision-diff-list">
+      {changes.map(([label, before, after]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>
+            <del>{before}</del>
+            <span aria-hidden="true">→</span>
+            <ins>{after}</ins>
+          </dd>
+        </div>
+      ))}
+      {changes.length === 0 && (
+        <div>
+          <dt>Terms</dt>
+          <dd>No visible field changed.</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+function MarketRevisionResolveActions({
+  marketId,
+  revision,
+  busy,
+  onAction,
+}: {
+  marketId: string;
+  revision: MarketRevisionView;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+}) {
+  return (
+    <div className="resolve-actions revision-resolve-actions">
+      <span>Resolve market v{revision.revisionNumber}</span>
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() =>
+          void onAction(
+            {
+              type: "resolve_market",
+              marketId,
+              marketRevisionId: revision.id,
+              result: "a",
+            },
+            `${revision.selectionA} recorded as the winner for market v${revision.revisionNumber}.`,
+          )
+        }
+      >
+        {revision.selectionA} won
+      </button>
+      <button
+        type="button"
+        disabled={busy !== null}
+        onClick={() =>
+          void onAction(
+            {
+              type: "resolve_market",
+              marketId,
+              marketRevisionId: revision.id,
+              result: "b",
+            },
+            `${revision.selectionB} recorded as the winner for market v${revision.revisionNumber}.`,
+          )
+        }
+      >
+        {revision.selectionB} won
+      </button>
+      <button
+        type="button"
+        className="danger"
+        disabled={busy !== null}
+        onClick={() =>
+          void onAction(
+            {
+              type: "resolve_market",
+              marketId,
+              marketRevisionId: revision.id,
+              result: "void",
+            },
+            `Market v${revision.revisionNumber} voided.`,
+          )
+        }
+      >
+        Void
+      </button>
+    </div>
   );
 }
 
@@ -1628,6 +2428,12 @@ function relativeTime(value: string): string {
 
 function defaultCloseTime(): string {
   const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function toDateTimeInput(value: string): string {
+  const date = new Date(value);
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
 }

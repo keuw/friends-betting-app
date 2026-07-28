@@ -35,6 +35,7 @@ export const markets = sqliteTable(
     creatorUserId: text("creator_user_id")
       .notNull()
       .references(() => users.id),
+    currentRevisionId: text("current_revision_id"),
     createdAt: text("created_at").notNull().default(now),
     resolvedAt: text("resolved_at"),
   },
@@ -48,6 +49,56 @@ export const markets = sqliteTable(
     check(
       "markets_winning_selection_check",
       sql`${table.winningSelection} IS NULL OR ${table.winningSelection} IN ('a', 'b')`,
+    ),
+  ],
+);
+
+export const marketRevisions = sqliteTable(
+  "market_revisions",
+  {
+    id: text("id").primaryKey(),
+    marketId: text("market_id")
+      .notNull()
+      .references(() => markets.id),
+    revisionNumber: integer("revision_number").notNull(),
+    question: text("question").notNull(),
+    description: text("description").notNull().default(""),
+    selectionA: text("selection_a").notNull(),
+    selectionB: text("selection_b").notNull(),
+    closesAt: text("closes_at").notNull(),
+    status: text("status").notNull().default("open"),
+    winningSelection: text("winning_selection"),
+    editorUserId: text("editor_user_id")
+      .notNull()
+      .references(() => users.id),
+    changeNote: text("change_note").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+    resolvedAt: text("resolved_at"),
+  },
+  (table) => [
+    uniqueIndex("market_revisions_market_number_unique").on(
+      table.marketId,
+      table.revisionNumber,
+    ),
+    index("market_revisions_market_created_idx").on(
+      table.marketId,
+      table.createdAt,
+    ),
+    index("market_revisions_status_closes_idx").on(
+      table.status,
+      table.closesAt,
+    ),
+    check(
+      "market_revisions_status_check",
+      sql`${table.status} IN ('open', 'resolved', 'void')`,
+    ),
+    check(
+      "market_revisions_winning_selection_check",
+      sql`${table.winningSelection} IS NULL OR ${table.winningSelection} IN ('a', 'b')`,
+    ),
+    check(
+      "market_revisions_number_check",
+      sql`${table.revisionNumber} > 0`,
     ),
   ],
 );
@@ -90,6 +141,9 @@ export const offerLegs = sqliteTable(
     marketId: text("market_id")
       .notNull()
       .references(() => markets.id),
+    marketRevisionId: text("market_revision_id").references(
+      () => marketRevisions.id,
+    ),
     makerSelection: text("maker_selection").notNull(),
   },
   (table) => [
@@ -171,6 +225,7 @@ export const bets = sqliteTable(
     makerRiskCents: integer("maker_risk_cents").notNull(),
     takerRiskCents: integer("taker_risk_cents").notNull(),
     acceptedCounterId: text("accepted_counter_id"),
+    currentRevisionId: text("current_revision_id"),
     status: text("status").notNull().default("pending"),
     acceptedAt: text("accepted_at").notNull().default(now),
     settledAt: text("settled_at"),
@@ -187,6 +242,90 @@ export const bets = sqliteTable(
     check(
       "bets_participants_check",
       sql`${table.makerUserId} <> ${table.takerUserId}`,
+    ),
+  ],
+);
+
+export const betRevisions = sqliteTable(
+  "bet_revisions",
+  {
+    id: text("id").primaryKey(),
+    betId: text("bet_id")
+      .notNull()
+      .references(() => bets.id),
+    revisionNumber: integer("revision_number").notNull(),
+    makerRiskCents: integer("maker_risk_cents").notNull(),
+    takerRiskCents: integer("taker_risk_cents").notNull(),
+    proposerUserId: text("proposer_user_id")
+      .notNull()
+      .references(() => users.id),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id),
+    status: text("status").notNull().default("pending"),
+    changeNote: text("change_note").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+    respondedAt: text("responded_at"),
+  },
+  (table) => [
+    uniqueIndex("bet_revisions_bet_number_unique").on(
+      table.betId,
+      table.revisionNumber,
+    ),
+    uniqueIndex("bet_revisions_one_pending")
+      .on(table.betId)
+      .where(sql`${table.status} = 'pending'`),
+    uniqueIndex("bet_revisions_one_active")
+      .on(table.betId)
+      .where(sql`${table.status} = 'active'`),
+    index("bet_revisions_bet_created_idx").on(table.betId, table.createdAt),
+    check(
+      "bet_revisions_status_check",
+      sql`${table.status} IN ('active', 'pending', 'rejected', 'cancelled', 'superseded')`,
+    ),
+    check(
+      "bet_revisions_participants_check",
+      sql`${table.proposerUserId} <> ${table.recipientUserId}`,
+    ),
+    check(
+      "bet_revisions_maker_risk_check",
+      sql`${table.makerRiskCents} > 0`,
+    ),
+    check(
+      "bet_revisions_taker_risk_check",
+      sql`${table.takerRiskCents} > 0`,
+    ),
+    check(
+      "bet_revisions_number_check",
+      sql`${table.revisionNumber} > 0`,
+    ),
+  ],
+);
+
+export const betRevisionLegs = sqliteTable(
+  "bet_revision_legs",
+  {
+    id: text("id").primaryKey(),
+    betRevisionId: text("bet_revision_id")
+      .notNull()
+      .references(() => betRevisions.id),
+    marketId: text("market_id")
+      .notNull()
+      .references(() => markets.id),
+    marketRevisionId: text("market_revision_id")
+      .notNull()
+      .references(() => marketRevisions.id),
+    makerSelection: text("maker_selection").notNull(),
+  },
+  (table) => [
+    uniqueIndex("bet_revision_legs_revision_market_unique").on(
+      table.betRevisionId,
+      table.marketId,
+    ),
+    index("bet_revision_legs_market_revision_idx").on(table.marketRevisionId),
+    check(
+      "bet_revision_legs_selection_check",
+      sql`${table.makerSelection} IN ('a', 'b')`,
     ),
   ],
 );

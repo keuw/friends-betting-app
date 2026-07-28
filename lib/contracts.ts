@@ -2,6 +2,12 @@ export type Selection = "a" | "b";
 export type MarketStatus = "open" | "resolved" | "void";
 export type OfferStatus = "open" | "accepted" | "cancelled" | "expired";
 export type BetStatus = "pending" | "maker_won" | "taker_won" | "void";
+export type BetRevisionStatus =
+  | "active"
+  | "pending"
+  | "rejected"
+  | "cancelled"
+  | "superseded";
 export type SettlementStatus =
   | "pending"
   | "confirmed"
@@ -25,10 +31,33 @@ export type MarketView = {
   creatorName: string;
   createdByMe: boolean;
   createdAt: string;
+  currentRevisionId: string;
+  revisionNumber: number;
+  revisions: MarketRevisionView[];
+};
+
+export type MarketRevisionView = {
+  id: string;
+  revisionNumber: number;
+  question: string;
+  description: string;
+  selectionA: string;
+  selectionB: string;
+  closesAt: string;
+  status: MarketStatus;
+  winningSelection: Selection | null;
+  editorName: string;
+  changeNote: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  isCurrent: boolean;
+  canResolve: boolean;
 };
 
 export type OfferLegView = {
   marketId: string;
+  marketRevisionId: string;
+  marketRevisionNumber: number;
   marketQuestion: string;
   marketClosesAt: string;
   makerSelection: Selection;
@@ -73,6 +102,25 @@ export type BetView = {
   settledAt: string | null;
   isParticipant: boolean;
   mySide: "maker" | "taker" | null;
+  currentRevisionId: string;
+  canProposeRevision: boolean;
+  legs: OfferLegView[];
+  revisions: BetRevisionView[];
+};
+
+export type BetRevisionView = {
+  id: string;
+  revisionNumber: number;
+  makerRiskCents: number;
+  takerRiskCents: number;
+  proposerName: string;
+  recipientName: string;
+  status: BetRevisionStatus;
+  changeNote: string;
+  createdAt: string;
+  respondedAt: string | null;
+  canRespond: boolean;
+  canCancel: boolean;
   legs: OfferLegView[];
 };
 
@@ -132,7 +180,23 @@ export type CreateOfferAction = {
   type: "create_offer";
   makerRiskCents: number;
   takerRiskCents: number;
-  legs: Array<{ marketId: string; selection: Selection }>;
+  legs: Array<{
+    marketId: string;
+    marketRevisionId: string;
+    selection: Selection;
+  }>;
+};
+
+export type EditMarketAction = {
+  type: "edit_market";
+  marketId: string;
+  baseRevisionId: string;
+  question: string;
+  description: string;
+  selectionA: string;
+  selectionB: string;
+  closesAt: string;
+  changeNote: string;
 };
 
 export type CreateCounterofferAction = {
@@ -157,7 +221,32 @@ export type CancelOfferAction = {
 export type ResolveMarketAction = {
   type: "resolve_market";
   marketId: string;
+  marketRevisionId: string;
   result: Selection | "void";
+};
+
+export type ProposeBetRevisionAction = {
+  type: "propose_bet_revision";
+  betId: string;
+  makerRiskCents: number;
+  takerRiskCents: number;
+  changeNote: string;
+  legs: Array<{
+    marketId: string;
+    marketRevisionId: string;
+    selection: Selection;
+  }>;
+};
+
+export type RespondBetRevisionAction = {
+  type: "respond_bet_revision";
+  betRevisionId: string;
+  decision: "accepted" | "rejected";
+};
+
+export type CancelBetRevisionAction = {
+  type: "cancel_bet_revision";
+  betRevisionId: string;
 };
 
 export type ProposeOfflineSettlementAction = {
@@ -174,10 +263,14 @@ export type RespondOfflineSettlementAction = {
 
 export type AppAction =
   | CreateMarketAction
+  | EditMarketAction
   | CreateOfferAction
   | CreateCounterofferAction
   | AcceptOfferAction
   | CancelOfferAction
   | ResolveMarketAction
+  | ProposeBetRevisionAction
+  | RespondBetRevisionAction
+  | CancelBetRevisionAction
   | ProposeOfflineSettlementAction
   | RespondOfflineSettlementAction;

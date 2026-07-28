@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 8 complete
+**Status:** Phase 9 in progress
 
 ## Product contract
 
@@ -11,7 +11,8 @@ counteroffers, and accept exactly one opponent per offer. The application
 records real-world dollar obligations but never holds money, connects to a
 payment provider, or verifies payments.
 
-Every accepted bet and debt-settlement action is visible to signed-in members.
+Every accepted bet, edit proposal, revision, and debt-settlement action is
+visible to signed-in members.
 
 ## Locked mechanics
 
@@ -34,7 +35,25 @@ Every accepted bet and debt-settlement action is visible to signed-in members.
   make, counter, or accept offers containing their own market.
 - Creator participation and creator resolution remain visible in the public
   activity ledger so the friend group can audit the conflict of interest.
-- Accepted bets and negotiation history are immutable.
+- Market and bet revisions are append-only. Editing creates a new version and
+  never rewrites terms that another user previously saw or accepted.
+- Every offer and matched bet points to the exact market revision used when its
+  terms were created. Later market edits affect only new offers and explicitly
+  approved bet revisions.
+- Only the market creator may propose new market terms, and only while the
+  current revision is open and before its betting deadline.
+- A market revision is resolved independently, so a bet on an older revision
+  is graded against that older revision's wording, outcomes, and result.
+- Either participant may propose a matched-bet revision, but only the other
+  participant may accept it.
+- A matched-bet revision may change exact risk amounts and the selected
+  straight/parlay legs. Participants and already-recorded history never change.
+- The original matched-bet terms remain active until the other participant
+  explicitly accepts the proposed revision.
+- Bet revisions may be proposed and accepted only while the bet is pending and
+  every proposed leg remains open before its own betting deadline.
+- Accepted offers, counteroffers, market revisions, bet revisions, and their
+  response history remain immutable.
 - Market resolution creates a pairwise debt from loser to winner.
 - Reciprocal debts net automatically in the display without rewriting history.
 - The current debtor may mark an amount as paid offline.
@@ -50,6 +69,8 @@ Every accepted bet and debt-settlement action is visible to signed-in members.
 - If every leg is void, the matched bet is void and creates no debt.
 - If unresolved legs remain and no leg has lost, the bet remains pending.
 - Counteroffers may change money terms but not the selected legs.
+- A bilateral matched-bet revision may replace the money terms and selected
+  legs before any affected leg closes.
 
 ## Authentication and access
 
@@ -70,9 +91,21 @@ Every accepted bet and debt-settlement action is visible to signed-in members.
 - `id`, `question`, `description`.
 - `selection_a`, `selection_b`.
 - `closes_at`.
+- `current_revision_id`.
 - `status`: `open`, `resolved`, or `void`.
 - `winning_selection`: `a`, `b`, or null.
 - `creator_user_id`, `created_at`, `resolved_at`.
+- Current term fields remain a materialized view of `current_revision_id` for
+  ledger search and backwards-compatible queries.
+
+### `market_revisions`
+
+- `id`, `market_id`, monotonically increasing `revision_number`.
+- Immutable `question`, `description`, `selection_a`, `selection_b`, and
+  `closes_at`.
+- Independent `status`, `winning_selection`, and `resolved_at`.
+- `editor_user_id`, required `change_note`, `created_at`.
+- Unique `(market_id, revision_number)`.
 
 ### `offers`
 
@@ -84,7 +117,7 @@ Every accepted bet and debt-settlement action is visible to signed-in members.
 
 ### `offer_legs`
 
-- `id`, `offer_id`, `market_id`, `maker_selection`.
+- `id`, `offer_id`, `market_id`, `market_revision_id`, `maker_selection`.
 - Unique `(offer_id, market_id)`.
 
 ### `counteroffers`
@@ -101,8 +134,24 @@ Every accepted bet and debt-settlement action is visible to signed-in members.
 - `maker_user_id`, `taker_user_id`.
 - `maker_risk_cents`, `taker_risk_cents`.
 - `accepted_counter_id`.
+- `current_revision_id`.
 - `status`: `pending`, `maker_won`, `taker_won`, or `void`.
 - `accepted_at`, `settled_at`.
+
+### `bet_revisions`
+
+- `id`, `bet_id`, monotonically increasing `revision_number`.
+- Immutable `maker_risk_cents`, `taker_risk_cents`.
+- `proposer_user_id`, `recipient_user_id`.
+- `status`: `active`, `pending`, `rejected`, `cancelled`, or `superseded`.
+- `change_note`, `created_at`, `responded_at`.
+- Unique `(bet_id, revision_number)`, with at most one `pending` and one
+  `active` revision per bet.
+
+### `bet_revision_legs`
+
+- `id`, `bet_revision_id`, `market_revision_id`, `maker_selection`.
+- Unique `(bet_revision_id, market_revision_id)`.
 
 ### `debts`
 
@@ -137,16 +186,36 @@ Acceptance uses the database as the sole arbiter:
 Offline settlement confirmation is idempotent and may transition only from
 `pending` to `confirmed` or `rejected` once.
 
+Market and matched-bet editing also use the database as the sole arbiter:
+
+1. A market edit includes the revision the editor started from. It creates a
+   new immutable revision only if that revision is still current, open, and
+   before its deadline; stale editors receive `409 MARKET_CHANGED`.
+2. A matched-bet proposal inserts one immutable pending revision. A partial
+   unique index prevents competing pending proposals for the same bet.
+3. Only the named recipient may accept or reject a pending bet revision; the
+   proposer may cancel it.
+4. Acceptance atomically revalidates that the bet is pending and every proposed
+   market revision is still open before its deadline, activates the proposed
+   revision, and supersedes the prior active revision.
+5. Concurrent responses or a simultaneous market resolution produce one
+   winning transition. Losing requests return a structured `409` and never
+   alter active bet terms.
+
 ## Server surface
 
 - `GET /api/state` — signed-in application snapshot.
 - `POST /api/actions` with a validated discriminated action:
   - `create_market`
+  - `edit_market`
   - `resolve_market`
   - `create_offer`
   - `create_counteroffer`
   - `accept_offer`
   - `cancel_offer`
+  - `propose_bet_revision`
+  - `respond_bet_revision`
+  - `cancel_bet_revision`
   - `propose_offline_settlement`
   - `respond_offline_settlement`
 
@@ -422,6 +491,95 @@ Acceptance:
 - Open markets always precede non-open markets.
 - Later-closing open markets appear above earlier-closing open markets.
 - Offer composition remains earliest-closing-first.
+
+### Phase 9 — Versioned market and matched-bet editing
+
+Allow friends to correct or renegotiate terms without erasing what anyone
+originally saw or accepted. Market edits create independently resolvable
+versions. Matched-bet edits remain proposals until the other participant
+accepts, and no amendment can activate after an affected leg closes.
+
+Interaction contract:
+
+- Only a market's creator sees `Edit market` on its current open revision.
+- The market editor is prefilled with current terms and requires a short change
+  note explaining why the revision exists.
+- Saving creates a new numbered revision; it never alters prior revisions.
+- Market cards expose a public history view with timestamps, change notes, and
+  field-level before/after values.
+- Existing offers and bets display the exact market revision they use, even
+  after the market's current terms change.
+- Historical market revisions remain independently resolvable wherever an open
+  offer or pending bet still references them.
+- Either participant in a pending matched bet may choose `Propose change`.
+- The proposal editor starts from the active revision and may change both risk
+  amounts and the selected straight/parlay legs.
+- The recipient sees an explicit old-versus-new diff and may accept or reject;
+  the proposer may cancel while it remains pending.
+- Until acceptance, every bet card and settlement calculation continues using
+  the currently active revision.
+- All friends may inspect original terms and every pending, accepted, rejected,
+  cancelled, or superseded revision. Only the two participants may act.
+- Editing controls disappear once the bet settles or any proposed leg reaches
+  its deadline; stale open editors receive a clear conflict message.
+
+Implementation:
+
+- [x] Add failing domain, action-validation, migration, and production
+  regression tests for immutable market snapshots, version-specific grading,
+  bilateral bet edits, deadline rejection, and concurrent responses.
+- [x] Add `market_revisions`, `bet_revisions`, and `bet_revision_legs`; add
+  revision pointers to markets, offer legs, and bets with the required unique
+  and partial indexes.
+- [x] Generate and inspect a data migration that backfills one initial market
+  revision per existing market and one active bet revision per existing bet
+  without changing any current result, debt, or settlement.
+- [x] Change offer creation and acceptance to lock exact market revision IDs;
+  preserve older open offers on their original terms and validate their
+  original revision deadlines.
+- [x] Grade pending bets and create debts from the active bet revision and its
+  version-specific market results.
+- [x] Implement market editing with creator authorization, optimistic
+  `baseRevisionId` checks, bounded terms, a required change note, and public
+  audit events.
+- [x] Implement propose, accept, reject, and cancel actions for bet revisions
+  with participant authorization and database-enforced single-transition
+  concurrency.
+- [x] Extend the state contract with current revision IDs, market history, bet
+  history, pending-response permissions, and exact revision terms.
+- [x] Add the market edit form, public revision timeline, revision badges, and
+  safe resolution controls for referenced historical revisions.
+- [x] Add the matched-bet proposal editor, old-versus-new review, accept/reject
+  controls, cancellation, stale-state feedback, and public revision timeline.
+- [x] Update activity copy, `README.md`, `CONTRIBUTING.md`, and `DESIGN.md` to
+  document append-only edits and bilateral approval.
+- [x] Run unit tests, rendered-output tests, lint, strict type checking,
+  migration generation, and the production build.
+- [x] Exercise separate creator, maker, and taker identities locally to prove
+  old market terms still settle correctly and a bet changes only after the
+  counterparty accepts.
+- [/] Commit and push the verified source, publish a new Sites version, and
+  verify the production URL.
+
+Acceptance:
+
+- Editing a market never changes the terms shown on an existing offer or bet.
+- A creator can inspect and resolve every market revision still referenced by
+  an offer or pending bet.
+- New offers use the newest market revision; older offers clearly identify
+  their earlier revision.
+- Either bet participant can propose new amounts and legs, but cannot accept
+  their own proposal.
+- Rejected, cancelled, stale, or unaccepted proposals never affect grading or
+  debts.
+- An accepted revision becomes active exactly once and remains permanently
+  visible beside the original and all intermediate proposals.
+- No bet can be amended after settlement, after any proposed leg closes, or
+  after any proposed leg resolves or voids.
+- Concurrent edit or response attempts resolve deterministically with no
+  partial state and a structured conflict for the loser.
+- Existing offer acceptance, counteroffer, parlay grading, settlement, search,
+  authentication, and public-audit behavior continue to pass.
 
 ## Required verification
 

@@ -1,5 +1,9 @@
 export type LegResult = "won" | "lost" | "void" | "pending";
 export type BetResult = "maker_won" | "taker_won" | "void" | "pending";
+export type RevisionLegWindow = {
+  status: "open" | "resolved" | "void";
+  closesAt: string;
+};
 
 export type DebtEntry = {
   id: string;
@@ -53,6 +57,22 @@ export function gradeParlay(results: readonly LegResult[]): BetResult {
   }
 
   return "maker_won";
+}
+
+export function canAmendBet(
+  betStatus: BetResult,
+  legs: readonly RevisionLegWindow[],
+  nowMs = Date.now(),
+): boolean {
+  return (
+    betStatus === "pending" &&
+    legs.length > 0 &&
+    legs.every(
+      (leg) =>
+        leg.status === "open" &&
+        new Date(leg.closesAt).getTime() > nowMs,
+    )
+  );
 }
 
 export function derivePairBalances(

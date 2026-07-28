@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   americanOdds,
+  canAmendBet,
   derivePairBalances,
   gradeParlay,
   isValidMoneyTerm,
@@ -33,6 +34,46 @@ test("grades parlays from the maker proposition", () => {
   assert.equal(gradeParlay(["lost", "pending"]), "taker_won");
   assert.equal(gradeParlay(["void", "void"]), "void");
   assert.equal(gradeParlay([]), "void");
+});
+
+test("allows bet revisions only while every proposed leg is open", () => {
+  const now = Date.parse("2026-07-28T12:00:00.000Z");
+  assert.equal(
+    canAmendBet(
+      "pending",
+      [
+        { status: "open", closesAt: "2026-07-28T13:00:00.000Z" },
+        { status: "open", closesAt: "2026-07-29T13:00:00.000Z" },
+      ],
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    canAmendBet(
+      "pending",
+      [{ status: "open", closesAt: "2026-07-28T12:00:00.000Z" }],
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    canAmendBet(
+      "pending",
+      [{ status: "resolved", closesAt: "2026-07-29T13:00:00.000Z" }],
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    canAmendBet(
+      "maker_won",
+      [{ status: "open", closesAt: "2026-07-29T13:00:00.000Z" }],
+      now,
+    ),
+    false,
+  );
+  assert.equal(canAmendBet("pending", [], now), false);
 });
 
 test("nets reciprocal debts and confirmed offline settlements", () => {
@@ -119,6 +160,9 @@ test("filters and orders the All markets ledger independently from the composer"
     creatorName: "Jordan",
     createdByMe: false,
     createdAt: "2026-07-28T12:00:00.000Z",
+    currentRevisionId: `${id}-revision-1`,
+    revisionNumber: 1,
+    revisions: [],
     ...overrides,
   });
   const markets = [

@@ -1435,6 +1435,29 @@ button.brand-lockup {
   font-size: 0.62rem;
 }
 
+.bet-status-line > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.revision-tag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.22rem 0.38rem;
+  border: 1px solid rgba(20, 32, 24, 0.22);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.5rem;
+  font-weight: 850;
+  letter-spacing: 0.025em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .status-badge {
   display: inline-flex;
   width: fit-content;
@@ -1449,7 +1472,8 @@ button.brand-lockup {
 }
 
 .status-open,
-.status-pending {
+.status-pending,
+.status-active {
   background: var(--acid);
 }
 
@@ -1462,7 +1486,8 @@ button.brand-lockup {
 
 .status-void,
 .status-rejected,
-.status-cancelled {
+.status-cancelled,
+.status-superseded {
   background: #ffd7d3;
 }
 
@@ -1509,6 +1534,12 @@ button.brand-lockup {
   margin-top: 0.35rem;
 }
 
+.bet-leg-list .revision-tag,
+.offer-leg .revision-tag {
+  margin-top: 0.35rem;
+  color: var(--muted);
+}
+
 .bet-bottom {
   display: grid;
   gap: 0.75rem;
@@ -1535,6 +1566,283 @@ button.brand-lockup {
 .bet-bottom b {
   font-family: var(--font-geist-mono), monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.bet-revision-actions,
+.revision-response-actions,
+.revision-editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.bet-revision-actions {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed var(--line);
+}
+
+.revision-proposal,
+.bet-revision-editor,
+.revision-history {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #f8f5ed;
+}
+
+.revision-proposal {
+  padding: 0.9rem;
+  border-color: rgba(98, 117, 255, 0.55);
+  background: var(--surface-info);
+}
+
+.revision-proposal-head,
+.revision-editor-head,
+.revision-history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.revision-proposal-head > div,
+.revision-editor-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+}
+
+.revision-proposal-head > div > span,
+.revision-editor-head > div > span,
+.revision-history-head > span,
+.bet-terms-summary > span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.revision-proposal-head strong {
+  font-size: 0.8rem;
+}
+
+.revision-note {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.revision-guardrail {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--blue);
+  background: rgba(255, 253, 247, 0.7);
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+.revision-comparison {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0.75rem;
+}
+
+.revision-response-actions {
+  margin-top: 0.75rem;
+}
+
+.bet-terms-summary {
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.bet-terms-summary > strong,
+.bet-terms-summary > small {
+  display: block;
+}
+
+.bet-terms-summary > strong {
+  margin-top: 0.35rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.73rem;
+}
+
+.bet-terms-summary > small {
+  margin-top: 0.18rem;
+  color: var(--muted);
+  font-size: 0.56rem;
+}
+
+.bet-terms-summary ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin: 0.55rem 0 0;
+  padding: 0 0 0 1rem;
+}
+
+.bet-terms-summary li {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+
+.bet-revision-editor,
+.market-edit-form {
+  padding: 0.9rem;
+  background: var(--cream);
+}
+
+.revision-editor-head h4 {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.revision-editor-head > span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.55rem;
+}
+
+.bet-revision-editor > p,
+.market-edit-form > p {
+  margin: 0.65rem 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.revision-terms {
+  margin-bottom: 0.8rem;
+  padding: 0.65rem;
+  background: var(--paper);
+}
+
+.revision-change-note,
+.market-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.revision-change-note > span,
+.market-edit-form label > span {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.revision-change-note textarea,
+.market-edit-form input,
+.market-edit-form textarea {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.7rem;
+  resize: vertical;
+}
+
+.revision-change-note textarea,
+.market-edit-form textarea {
+  min-height: 4.5rem;
+}
+
+.revision-market-list {
+  display: flex;
+  max-height: 18rem;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: auto;
+  margin-top: 0.8rem;
+  padding-right: 0.2rem;
+}
+
+.revision-market-option {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, 0.8fr);
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.revision-market-option > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.24rem;
+}
+
+.revision-market-option strong {
+  overflow-wrap: anywhere;
+  font-size: 0.68rem;
+}
+
+.revision-editor-actions {
+  margin-top: 0.8rem;
+}
+
+.revision-history {
+  overflow: hidden;
+}
+
+.revision-history-head {
+  padding: 0.7rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.revision-history-head > span,
+.revision-history-head > small {
+  color: inherit;
+}
+
+.revision-history-head > small {
+  font-size: 0.56rem;
+}
+
+.revision-history-row {
+  padding: 0.75rem;
+}
+
+.revision-history-row + .revision-history-row {
+  border-top: 1px dashed var(--line);
+}
+
+.revision-history-row > div:first-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.revision-history-row > p {
+  margin: 0.55rem 0 0.2rem;
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.revision-history-row > small {
+  display: block;
+  margin-bottom: 0.6rem;
+  color: var(--muted);
+  font-size: 0.56rem;
 }
 
 .participant-ribbon {
@@ -1933,11 +2241,123 @@ button.brand-lockup {
   font-size: 0.62rem;
 }
 
+.market-row-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.market-row-controls .button-quiet {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.market-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.market-edit-form .two-field {
+  gap: 0.65rem;
+}
+
+.market-revision-history {
+  margin-top: 1rem;
+}
+
+.market-revision-snapshot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.64rem;
+}
+
+.market-revision-snapshot > span {
+  color: var(--muted);
+}
+
+.revision-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.revision-diff-list > div {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(4rem, 0.22fr) minmax(0, 1fr);
+}
+
+.revision-diff-list dt {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.revision-diff-list dd {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  margin: 0;
+  font-size: 0.6rem;
+  line-height: 1.4;
+}
+
+.revision-diff-list del,
+.revision-diff-list ins {
+  overflow-wrap: anywhere;
+  text-decoration-thickness: 1px;
+}
+
+.revision-diff-list del {
+  color: var(--danger);
+}
+
+.revision-diff-list ins {
+  color: var(--ink);
+  font-weight: 750;
+  text-decoration: none;
+}
+
 .resolve-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.35rem;
+}
+
+.revision-resolve-actions {
+  align-items: center;
+  margin-top: 0.8rem;
+  padding: 0.65rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+}
+
+.revision-resolve-actions > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .resolve-actions button {
@@ -2273,8 +2693,11 @@ button.brand-lockup {
   }
 
   .offer-actions,
-  .settlement-actions {
+  .settlement-actions,
+  .revision-response-actions,
+  .revision-editor-actions {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .button-accept {
@@ -2291,6 +2714,20 @@ button.brand-lockup {
 
   .bets-grid {
     grid-template-columns: 1fr;
+  }
+
+  .revision-comparison,
+  .revision-market-option,
+  .revision-diff-list > div {
+    grid-template-columns: 1fr;
+  }
+
+  .revision-diff-list dd {
+    grid-template-columns: 1fr;
+  }
+
+  .revision-diff-list dd > span {
+    transform: rotate(90deg);
   }
 
   .two-field {
@@ -2328,8 +2765,17 @@ button.brand-lockup {
     flex-direction: column;
   }
 
+  .market-row-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .resolve-actions {
     justify-content: flex-start;
+  }
+
+  .revision-resolve-actions > span {
+    width: 100%;
   }
 
   .app-footer {

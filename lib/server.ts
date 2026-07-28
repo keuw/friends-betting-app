@@ -1,9 +1,10 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { ensureSchema, getD1 } from "@/db";
+import { AppError } from "@/lib/action-parser";
 import {
+  canAmendBet,
   derivePairBalances,
   gradeParlay,
-  isValidMoneyTerm,
   type DebtEntry,
   type LegResult,
   type OfflineSettlementEntry,
@@ -11,6 +12,7 @@ import {
 import type {
   AppAction,
   AppState,
+  BetRevisionStatus,
   BetStatus,
   MarketStatus,
   OfferStatus,
@@ -41,7 +43,27 @@ type MarketRow = {
   winning_selection: Selection | null;
   creator_user_id: string;
   creator_name: string;
+  current_revision_id: string;
+  revision_number: number;
   created_at: string;
+};
+
+type MarketRevisionRow = {
+  id: string;
+  market_id: string;
+  revision_number: number;
+  question: string;
+  description: string;
+  selection_a: string;
+  selection_b: string;
+  closes_at: string;
+  status: MarketStatus;
+  winning_selection: Selection | null;
+  editor_user_id: string;
+  editor_name: string;
+  change_note: string;
+  created_at: string;
+  resolved_at: string | null;
 };
 
 type OfferRow = {
@@ -58,6 +80,8 @@ type OfferRow = {
 type OfferLegRow = {
   offer_id: string;
   market_id: string;
+  market_revision_id: string;
+  market_revision_number: number;
   market_question: string;
   market_closes_at: string;
   selection_a: string;
@@ -91,9 +115,30 @@ type BetRow = {
   taker_name: string;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  current_revision_id: string;
   status: BetStatus;
   accepted_at: string;
   settled_at: string | null;
+};
+
+type BetRevisionRow = {
+  id: string;
+  bet_id: string;
+  revision_number: number;
+  maker_risk_cents: number;
+  taker_risk_cents: number;
+  proposer_user_id: string;
+  proposer_name: string;
+  recipient_user_id: string;
+  recipient_name: string;
+  status: BetRevisionStatus;
+  change_note: string;
+  created_at: string;
+  responded_at: string | null;
+};
+
+type BetRevisionLegRow = Omit<OfferLegRow, "offer_id"> & {
+  bet_revision_id: string;
 };
 
 type DebtRow = {
@@ -147,7 +192,6 @@ type CounterDetailRow = {
 
 type PendingBetLegRow = {
   bet_id: string;
-  offer_id: string;
   maker_user_id: string;
   taker_user_id: string;
   maker_risk_cents: number;
@@ -157,18 +201,9 @@ type PendingBetLegRow = {
   winning_selection: Selection | null;
 };
 
-const MAX_TEXT_LENGTH = 500;
 const MAX_LEGS = 8;
 
-export class AppError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { AppError, parseAppAction } from "@/lib/action-parser";
 
 export async function requireAppUser(): Promise<AppUser> {
   const identity = await getChatGPTUser();
@@ -219,23 +254,34 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   const [
     usersResult,
     marketsResult,
+    marketRevisionsResult,
     offersResult,
     legsResult,
     countersResult,
     betsResult,
+    betRevisionsResult,
+    betRevisionLegsResult,
     debtsResult,
     settlementsResult,
     activityResult,
   ] = await db.batch([
     db.prepare(`SELECT id, email, display_name FROM users`),
     db.prepare(
-      `SELECT m.*, u.display_name AS creator_name
+      `SELECT m.*, u.display_name AS creator_name,
+              mr.revision_number
        FROM markets m
        JOIN users u ON u.id = m.creator_user_id
+       JOIN market_revisions mr ON mr.id = m.current_revision_id
        ORDER BY
          CASE m.status WHEN 'open' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END,
          datetime(m.closes_at) DESC,
          datetime(m.created_at) DESC`,
+    ),
+    db.prepare(
+      `SELECT mr.*, editor.display_name AS editor_name
+       FROM market_revisions mr
+       JOIN users editor ON editor.id = mr.editor_user_id
+       ORDER BY mr.market_id, mr.revision_number DESC`,
     ),
     db.prepare(
       `SELECT o.*, u.display_name AS maker_name
@@ -247,12 +293,13 @@ export async function getAppState(user: AppUser): Promise<AppState> {
        LIMIT 100`,
     ),
     db.prepare(
-      `SELECT l.offer_id, l.market_id, l.maker_selection,
-              m.question AS market_question, m.selection_a, m.selection_b,
-              m.closes_at AS market_closes_at, m.status AS market_status
+      `SELECT l.offer_id, l.market_id, l.market_revision_id,
+              l.maker_selection, mr.revision_number AS market_revision_number,
+              mr.question AS market_question, mr.selection_a, mr.selection_b,
+              mr.closes_at AS market_closes_at, mr.status AS market_status
        FROM offer_legs l
-       JOIN markets m ON m.id = l.market_id
-       ORDER BY l.offer_id, m.closes_at`,
+       JOIN market_revisions mr ON mr.id = l.market_revision_id
+       ORDER BY l.offer_id, mr.closes_at`,
     ),
     db.prepare(
       `SELECT c.*,
@@ -266,14 +313,36 @@ export async function getAppState(user: AppUser): Promise<AppState> {
        ORDER BY datetime(c.created_at) ASC`,
     ),
     db.prepare(
-      `SELECT b.*,
+      `SELECT b.id, b.offer_id, b.maker_user_id, b.taker_user_id,
+              b.current_revision_id, b.status, b.accepted_at, b.settled_at,
+              br.maker_risk_cents, br.taker_risk_cents,
               maker.display_name AS maker_name,
               taker.display_name AS taker_name
        FROM bets b
+       JOIN bet_revisions br ON br.id = b.current_revision_id
        JOIN users maker ON maker.id = b.maker_user_id
        JOIN users taker ON taker.id = b.taker_user_id
        ORDER BY datetime(b.accepted_at) DESC
        LIMIT 100`,
+    ),
+    db.prepare(
+      `SELECT br.*,
+              proposer.display_name AS proposer_name,
+              recipient.display_name AS recipient_name
+       FROM bet_revisions br
+       JOIN users proposer ON proposer.id = br.proposer_user_id
+       JOIN users recipient ON recipient.id = br.recipient_user_id
+       ORDER BY br.bet_id, br.revision_number DESC`,
+    ),
+    db.prepare(
+      `SELECT brl.bet_revision_id, brl.market_id, brl.market_revision_id,
+              brl.maker_selection,
+              mr.revision_number AS market_revision_number,
+              mr.question AS market_question, mr.selection_a, mr.selection_b,
+              mr.closes_at AS market_closes_at, mr.status AS market_status
+       FROM bet_revision_legs brl
+       JOIN market_revisions mr ON mr.id = brl.market_revision_id
+       ORDER BY brl.bet_revision_id, mr.closes_at`,
     ),
     db.prepare(
       `SELECT id, debtor_user_id, creditor_user_id, amount_cents
@@ -301,15 +370,27 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   const users = rows<UserRow>(usersResult);
   const userNames = new Map(users.map((row) => [row.id, row.display_name]));
   const marketRows = rows<MarketRow>(marketsResult);
+  const marketRevisionRows = rows<MarketRevisionRow>(marketRevisionsResult);
   const offerRows = rows<OfferRow>(offersResult);
   const legRows = rows<OfferLegRow>(legsResult);
   const counterRows = rows<CounterRow>(countersResult);
   const betRows = rows<BetRow>(betsResult);
+  const betRevisionRows = rows<BetRevisionRow>(betRevisionsResult);
+  const betRevisionLegRows = rows<BetRevisionLegRow>(betRevisionLegsResult);
   const debtRows = rows<DebtRow>(debtsResult);
   const settlementRows = rows<SettlementRow>(settlementsResult);
 
   const legsByOffer = groupBy(legRows, (row) => row.offer_id);
   const countersByOffer = groupBy(counterRows, (row) => row.root_offer_id);
+  const revisionsByMarket = groupBy(
+    marketRevisionRows,
+    (row) => row.market_id,
+  );
+  const revisionsByBet = groupBy(betRevisionRows, (row) => row.bet_id);
+  const legsByBetRevision = groupBy(
+    betRevisionLegRows,
+    (row) => row.bet_revision_id,
+  );
 
   const pairBalances = derivePairBalances(
     debtRows.map<DebtEntry>((row) => ({
@@ -341,6 +422,26 @@ export async function getAppState(user: AppUser): Promise<AppState> {
       creatorName: market.creator_name,
       createdByMe: market.creator_user_id === user.id,
       createdAt: market.created_at,
+      currentRevisionId: market.current_revision_id,
+      revisionNumber: market.revision_number,
+      revisions: (revisionsByMarket.get(market.id) ?? []).map((revision) => ({
+        id: revision.id,
+        revisionNumber: revision.revision_number,
+        question: revision.question,
+        description: revision.description,
+        selectionA: revision.selection_a,
+        selectionB: revision.selection_b,
+        closesAt: revision.closes_at,
+        status: revision.status,
+        winningSelection: revision.winning_selection,
+        editorName: revision.editor_name,
+        changeNote: revision.change_note,
+        createdAt: revision.created_at,
+        resolvedAt: revision.resolved_at,
+        isCurrent: revision.id === market.current_revision_id,
+        canResolve:
+          market.creator_user_id === user.id && revision.status === "open",
+      })),
     })),
     offers: offerRows.map((offer) => ({
       id: offer.id,
@@ -367,25 +468,59 @@ export async function getAppState(user: AppUser): Promise<AppState> {
           counter.recipient_user_id === user.id,
       })),
     })),
-    bets: betRows.map((bet) => ({
-      id: bet.id,
-      makerName: bet.maker_name,
-      takerName: bet.taker_name,
-      makerRiskCents: bet.maker_risk_cents,
-      takerRiskCents: bet.taker_risk_cents,
-      status: bet.status,
-      acceptedAt: bet.accepted_at,
-      settledAt: bet.settled_at,
-      isParticipant:
-        bet.maker_user_id === user.id || bet.taker_user_id === user.id,
-      mySide:
-        bet.maker_user_id === user.id
-          ? "maker"
-          : bet.taker_user_id === user.id
-            ? "taker"
-            : null,
-      legs: toLegViews(legsByOffer.get(bet.offer_id) ?? []),
-    })),
+    bets: betRows.map((bet) => {
+      const activeLegRows =
+        legsByBetRevision.get(bet.current_revision_id) ?? [];
+      const isParticipant =
+        bet.maker_user_id === user.id || bet.taker_user_id === user.id;
+      return {
+        id: bet.id,
+        makerName: bet.maker_name,
+        takerName: bet.taker_name,
+        makerRiskCents: bet.maker_risk_cents,
+        takerRiskCents: bet.taker_risk_cents,
+        status: bet.status,
+        acceptedAt: bet.accepted_at,
+        settledAt: bet.settled_at,
+        isParticipant,
+        mySide:
+          bet.maker_user_id === user.id
+            ? ("maker" as const)
+            : bet.taker_user_id === user.id
+              ? ("taker" as const)
+              : null,
+        currentRevisionId: bet.current_revision_id,
+        canProposeRevision:
+          isParticipant &&
+          canAmendBet(
+            bet.status,
+            activeLegRows.map((leg) => ({
+              status: leg.market_status,
+              closesAt: leg.market_closes_at,
+            })),
+          ),
+        legs: toLegViews(activeLegRows),
+        revisions: (revisionsByBet.get(bet.id) ?? []).map((revision) => ({
+          id: revision.id,
+          revisionNumber: revision.revision_number,
+          makerRiskCents: revision.maker_risk_cents,
+          takerRiskCents: revision.taker_risk_cents,
+          proposerName: revision.proposer_name,
+          recipientName: revision.recipient_name,
+          status: revision.status,
+          changeNote: revision.change_note,
+          createdAt: revision.created_at,
+          respondedAt: revision.responded_at,
+          canRespond:
+            revision.status === "pending" &&
+            revision.recipient_user_id === user.id,
+          canCancel:
+            revision.status === "pending" &&
+            revision.proposer_user_id === user.id,
+          legs: toLegViews(legsByBetRevision.get(revision.id) ?? []),
+        })),
+      };
+    }),
     pairBalances: pairBalances.map((balance) => ({
       debtorUserId: balance.debtorUserId,
       debtorName: userNames.get(balance.debtorUserId) ?? "Unknown",
@@ -425,89 +560,6 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   };
 }
 
-export function parseAppAction(input: unknown): AppAction {
-  const record = asRecord(input);
-  const type = requiredString(record.type, "type");
-
-  switch (type) {
-    case "create_market":
-      return {
-        type,
-        question: requiredString(record.question, "question"),
-        description: optionalString(record.description, "description"),
-        selectionA: requiredString(record.selectionA, "selectionA"),
-        selectionB: requiredString(record.selectionB, "selectionB"),
-        closesAt: requiredString(record.closesAt, "closesAt"),
-      };
-    case "create_offer":
-      return {
-        type,
-        makerRiskCents: requiredMoney(record.makerRiskCents, "makerRiskCents"),
-        takerRiskCents: requiredMoney(record.takerRiskCents, "takerRiskCents"),
-        legs: requiredLegs(record.legs),
-      };
-    case "create_counteroffer":
-      return {
-        type,
-        offerId: requiredId(record.offerId, "offerId"),
-        parentCounterId: optionalId(
-          record.parentCounterId,
-          "parentCounterId",
-        ),
-        makerRiskCents: requiredMoney(record.makerRiskCents, "makerRiskCents"),
-        takerRiskCents: requiredMoney(record.takerRiskCents, "takerRiskCents"),
-      };
-    case "accept_offer":
-      return {
-        type,
-        offerId: requiredId(record.offerId, "offerId"),
-        counterId: optionalId(record.counterId, "counterId"),
-      };
-    case "cancel_offer":
-      return {
-        type,
-        offerId: requiredId(record.offerId, "offerId"),
-      };
-    case "resolve_market": {
-      const result = requiredString(record.result, "result");
-      if (result !== "a" && result !== "b" && result !== "void") {
-        throw new AppError(400, "INVALID_RESULT", "Choose A, B, or void.");
-      }
-      return {
-        type,
-        marketId: requiredId(record.marketId, "marketId"),
-        result,
-      };
-    }
-    case "propose_offline_settlement":
-      return {
-        type,
-        creditorUserId: requiredId(
-          record.creditorUserId,
-          "creditorUserId",
-        ),
-        amountCents: requiredMoney(record.amountCents, "amountCents"),
-      };
-    case "respond_offline_settlement": {
-      const decision = requiredString(record.decision, "decision");
-      if (decision !== "confirmed" && decision !== "rejected") {
-        throw new AppError(
-          400,
-          "INVALID_DECISION",
-          "Confirm or reject the settlement.",
-        );
-      }
-      return {
-        type,
-        settlementId: requiredId(record.settlementId, "settlementId"),
-        decision,
-      };
-    }
-    default:
-      throw new AppError(400, "UNKNOWN_ACTION", "Unknown action.");
-  }
-}
-
 export async function performAction(
   user: AppUser,
   action: AppAction,
@@ -517,6 +569,9 @@ export async function performAction(
   switch (action.type) {
     case "create_market":
       await createMarket(user, action);
+      return;
+    case "edit_market":
+      await editMarket(user, action);
       return;
     case "create_offer":
       await createOffer(user, action);
@@ -531,7 +586,25 @@ export async function performAction(
       await cancelOffer(user, action.offerId);
       return;
     case "resolve_market":
-      await resolveMarket(user, action.marketId, action.result);
+      await resolveMarket(
+        user,
+        action.marketId,
+        action.marketRevisionId,
+        action.result,
+      );
+      return;
+    case "propose_bet_revision":
+      await proposeBetRevision(user, action);
+      return;
+    case "respond_bet_revision":
+      await respondBetRevision(
+        user,
+        action.betRevisionId,
+        action.decision,
+      );
+      return;
+    case "cancel_bet_revision":
+      await cancelBetRevision(user, action.betRevisionId);
       return;
     case "propose_offline_settlement":
       await proposeOfflineSettlement(
@@ -575,13 +648,15 @@ async function createMarket(
   }
 
   const id = crypto.randomUUID();
+  const revisionId = crypto.randomUUID();
   const db = getD1();
   await db.batch([
     db
       .prepare(
         `INSERT INTO markets
-          (id, question, description, selection_a, selection_b, closes_at, creator_user_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (id, question, description, selection_a, selection_b, closes_at,
+           creator_user_id, current_revision_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -591,11 +666,187 @@ async function createMarket(
         selectionB,
         closesAt.toISOString(),
         user.id,
+        revisionId,
+      ),
+    db
+      .prepare(
+        `INSERT INTO market_revisions
+          (id, market_id, revision_number, question, description, selection_a,
+           selection_b, closes_at, editor_user_id, change_note)
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        revisionId,
+        id,
+        question,
+        description,
+        selectionA,
+        selectionB,
+        closesAt.toISOString(),
+        user.id,
+        "Original market terms",
       ),
     auditStatement(db, user.id, "created_market", "market", id, {
       question,
+      marketRevisionId: revisionId,
     }),
   ]);
+}
+
+async function editMarket(
+  user: AppUser,
+  action: Extract<AppAction, { type: "edit_market" }>,
+): Promise<void> {
+  const question = boundedText(action.question, "Question", 5, 160);
+  const description = boundedText(action.description, "Description", 0, 500);
+  const selectionA = boundedText(action.selectionA, "Selection A", 1, 60);
+  const selectionB = boundedText(action.selectionB, "Selection B", 1, 60);
+  const changeNote = boundedText(action.changeNote, "Change note", 3, 200);
+  if (selectionA.toLowerCase() === selectionB.toLowerCase()) {
+    throw new AppError(
+      400,
+      "DUPLICATE_SELECTIONS",
+      "Selections must be different.",
+    );
+  }
+
+  const closesAt = new Date(action.closesAt);
+  if (Number.isNaN(closesAt.getTime()) || closesAt.getTime() <= Date.now()) {
+    throw new AppError(
+      400,
+      "INVALID_CLOSE_TIME",
+      "Choose a future closing time.",
+    );
+  }
+
+  const db = getD1();
+  const current = await first<{
+    creator_user_id: string;
+    current_revision_id: string;
+    revision_number: number;
+    revision_status: MarketStatus;
+    revision_closes_at: string;
+  }>(
+    db
+      .prepare(
+        `SELECT m.creator_user_id, m.current_revision_id,
+                mr.revision_number, mr.status AS revision_status,
+                mr.closes_at AS revision_closes_at
+         FROM markets m
+         JOIN market_revisions mr ON mr.id = m.current_revision_id
+         WHERE m.id = ?`,
+      )
+      .bind(action.marketId),
+  );
+  if (!current) {
+    throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
+  }
+  if (current.creator_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_MARKET_ORACLE",
+      "Only the market creator can edit it.",
+    );
+  }
+  if (
+    current.current_revision_id !== action.baseRevisionId ||
+    current.revision_status !== "open" ||
+    new Date(current.revision_closes_at).getTime() <= Date.now()
+  ) {
+    throw new AppError(
+      409,
+      "MARKET_CHANGED",
+      "This market changed or closed while you were editing. Review the latest terms.",
+    );
+  }
+
+  const revisionId = crypto.randomUUID();
+  let results: D1Result<unknown>[];
+  try {
+    results = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO market_revisions
+            (id, market_id, revision_number, question, description,
+             selection_a, selection_b, closes_at, editor_user_id, change_note)
+           SELECT ?, m.id, mr.revision_number + 1, ?, ?, ?, ?, ?, ?, ?
+           FROM markets m
+           JOIN market_revisions mr ON mr.id = m.current_revision_id
+           WHERE m.id = ?
+             AND m.current_revision_id = ?
+             AND mr.status = 'open'
+             AND datetime(mr.closes_at) > CURRENT_TIMESTAMP`,
+        )
+        .bind(
+          revisionId,
+          question,
+          description,
+          selectionA,
+          selectionB,
+          closesAt.toISOString(),
+          user.id,
+          changeNote,
+          action.marketId,
+          action.baseRevisionId,
+        ),
+      db
+        .prepare(
+          `UPDATE markets
+           SET question = ?, description = ?, selection_a = ?,
+               selection_b = ?, closes_at = ?, status = 'open',
+               winning_selection = NULL, resolved_at = NULL,
+               current_revision_id = ?
+           WHERE id = ?
+             AND current_revision_id = ?
+             AND EXISTS (
+               SELECT 1
+               FROM market_revisions
+               WHERE id = ? AND market_id = markets.id
+             )`,
+        )
+        .bind(
+          question,
+          description,
+          selectionA,
+          selectionB,
+          closesAt.toISOString(),
+          revisionId,
+          action.marketId,
+          action.baseRevisionId,
+          revisionId,
+        ),
+    ]);
+  } catch (error) {
+    if (String(error).toLowerCase().includes("unique")) {
+      throw new AppError(
+        409,
+        "MARKET_CHANGED",
+        "Another market revision was saved first. Review the latest terms.",
+      );
+    }
+    throw error;
+  }
+  if (results[0].meta.changes !== 1 || results[1].meta.changes !== 1) {
+    throw new AppError(
+      409,
+      "MARKET_CHANGED",
+      "This market changed or closed while you were editing. Review the latest terms.",
+    );
+  }
+
+  await auditStatement(
+    db,
+    user.id,
+    "edited_market",
+    "market_revision",
+    revisionId,
+    {
+      marketId: action.marketId,
+      previousRevisionId: action.baseRevisionId,
+      revisionNumber: current.revision_number + 1,
+      changeNote,
+    },
+  ).run();
 }
 
 async function createOffer(
@@ -619,7 +870,7 @@ async function createOffer(
     );
   }
 
-  const marketRows = await getMarketsByIds([...uniqueMarketIds]);
+  const marketRows = await getMarketRevisionsForLegs(action.legs);
   if (marketRows.length !== uniqueMarketIds.size) {
     throw new AppError(404, "MARKET_NOT_FOUND", "A selected market is missing.");
   }
@@ -628,6 +879,7 @@ async function createOffer(
   for (const market of marketRows) {
     if (
       market.status !== "open" ||
+      market.current_revision_id !== market.market_revision_id ||
       new Date(market.closes_at).getTime() <= nowMs
     ) {
       throw new AppError(
@@ -663,10 +915,16 @@ async function createOffer(
       db
         .prepare(
           `INSERT INTO offer_legs
-            (id, offer_id, market_id, maker_selection)
-           VALUES (?, ?, ?, ?)`,
+            (id, offer_id, market_id, market_revision_id, maker_selection)
+           VALUES (?, ?, ?, ?, ?)`,
         )
-        .bind(crypto.randomUUID(), offerId, leg.marketId, leg.selection),
+        .bind(
+          crypto.randomUUID(),
+          offerId,
+          leg.marketId,
+          leg.marketRevisionId,
+          leg.selection,
+        ),
     );
   }
   statements.push(
@@ -878,14 +1136,15 @@ async function acceptOffer(
     );
   }
   const betId = crypto.randomUUID();
+  const betRevisionId = crypto.randomUUID();
   try {
     const results = await db.batch([
       db
         .prepare(
           `INSERT INTO bets
             (id, offer_id, maker_user_id, taker_user_id, maker_risk_cents,
-             taker_risk_cents, accepted_counter_id)
-           SELECT ?, id, maker_user_id, ?, ?, ?, ?
+             taker_risk_cents, accepted_counter_id, current_revision_id)
+           SELECT ?, id, maker_user_id, ?, ?, ?, ?, ?
            FROM offers
            WHERE id = ? AND status = 'open'`,
         )
@@ -895,8 +1154,34 @@ async function acceptOffer(
           makerRiskCents,
           takerRiskCents,
           acceptedCounterId,
+          betRevisionId,
           root.id,
         ),
+      db
+        .prepare(
+          `INSERT INTO bet_revisions
+            (id, bet_id, revision_number, maker_risk_cents, taker_risk_cents,
+             proposer_user_id, recipient_user_id, status, change_note,
+             responded_at)
+           SELECT ?, id, 1, maker_risk_cents, taker_risk_cents,
+                  maker_user_id, taker_user_id, 'active',
+                  'Original matched terms', CURRENT_TIMESTAMP
+           FROM bets
+           WHERE id = ?`,
+        )
+        .bind(betRevisionId, betId),
+      db
+        .prepare(
+          `INSERT INTO bet_revision_legs
+            (id, bet_revision_id, market_id, market_revision_id,
+             maker_selection)
+           SELECT ? || ':' || l.market_id, ?, l.market_id,
+                  l.market_revision_id, l.maker_selection
+           FROM offer_legs l
+           JOIN bets b ON b.offer_id = l.offer_id
+           WHERE b.id = ?`,
+        )
+        .bind(`bet-revision-leg:${betId}`, betRevisionId, betId),
       db
         .prepare(
           `UPDATE offers
@@ -987,21 +1272,25 @@ async function cancelOffer(user: AppUser, offerId: string): Promise<void> {
 async function resolveMarket(
   user: AppUser,
   marketId: string,
+  marketRevisionId: string,
   result: Selection | "void",
 ): Promise<void> {
   const db = getD1();
   const market = await first<{
     id: string;
     creator_user_id: string;
-    status: MarketStatus;
+    current_revision_id: string;
+    revision_status: MarketStatus;
   }>(
     db
       .prepare(
-        `SELECT id, creator_user_id, status
-         FROM markets
-         WHERE id = ?`,
+        `SELECT m.id, m.creator_user_id, m.current_revision_id,
+                mr.status AS revision_status
+         FROM markets m
+         JOIN market_revisions mr ON mr.market_id = m.id
+         WHERE m.id = ? AND mr.id = ?`,
       )
-      .bind(marketId),
+      .bind(marketId, marketRevisionId),
   );
   if (!market) {
     throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
@@ -1013,19 +1302,28 @@ async function resolveMarket(
       "Only the market creator can resolve it.",
     );
   }
-  if (market.status !== "open") {
-    throw new AppError(409, "MARKET_RESOLVED", "This market is already final.");
+  if (market.revision_status !== "open") {
+    throw new AppError(
+      409,
+      "MARKET_RESOLVED",
+      "This market revision is already final.",
+    );
   }
 
   const update = await db
     .prepare(
-      `UPDATE markets
+      `UPDATE market_revisions
        SET status = ?,
            winning_selection = ?,
            resolved_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND status = 'open'`,
+       WHERE id = ? AND market_id = ? AND status = 'open'`,
     )
-    .bind(result === "void" ? "void" : "resolved", result === "void" ? null : result, market.id)
+    .bind(
+      result === "void" ? "void" : "resolved",
+      result === "void" ? null : result,
+      marketRevisionId,
+      market.id,
+    )
     .run();
   if (update.meta.changes !== 1) {
     throw new AppError(
@@ -1038,30 +1336,504 @@ async function resolveMarket(
   await db.batch([
     db
       .prepare(
+        `UPDATE markets
+         SET status = ?,
+             winning_selection = ?,
+             resolved_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND current_revision_id = ?`,
+      )
+      .bind(
+        result === "void" ? "void" : "resolved",
+        result === "void" ? null : result,
+        market.id,
+        marketRevisionId,
+      ),
+    db
+      .prepare(
         `UPDATE offers
          SET status = 'expired'
          WHERE status = 'open'
            AND id IN (
-             SELECT offer_id FROM offer_legs WHERE market_id = ?
+             SELECT offer_id
+             FROM offer_legs
+             WHERE market_revision_id = ?
            )`,
       )
-      .bind(market.id),
+      .bind(marketRevisionId),
     db
       .prepare(
         `UPDATE counteroffers
          SET status = 'superseded'
          WHERE status = 'pending'
            AND root_offer_id IN (
-             SELECT offer_id FROM offer_legs WHERE market_id = ?
+             SELECT offer_id
+             FROM offer_legs
+             WHERE market_revision_id = ?
            )`,
       )
-      .bind(market.id),
-    auditStatement(db, user.id, "resolved_market", "market", market.id, {
-      result,
-    }),
+      .bind(marketRevisionId),
+    auditStatement(
+      db,
+      user.id,
+      "resolved_market_revision",
+      "market_revision",
+      marketRevisionId,
+      {
+        marketId: market.id,
+        result,
+      },
+    ),
   ]);
 
   await settlePendingBets();
+}
+
+async function proposeBetRevision(
+  user: AppUser,
+  action: Extract<AppAction, { type: "propose_bet_revision" }>,
+): Promise<void> {
+  if (action.legs.length > MAX_LEGS) {
+    throw new AppError(
+      400,
+      "TOO_MANY_LEGS",
+      `Use at most ${MAX_LEGS} legs.`,
+    );
+  }
+  const uniqueMarketIds = new Set(action.legs.map((leg) => leg.marketId));
+  if (uniqueMarketIds.size !== action.legs.length) {
+    throw new AppError(
+      400,
+      "DUPLICATE_MARKET",
+      "A parlay can use each market only once.",
+    );
+  }
+  const changeNote = boundedText(action.changeNote, "Change note", 3, 200);
+  const db = getD1();
+  const bet = await first<{
+    id: string;
+    maker_user_id: string;
+    taker_user_id: string;
+    status: BetStatus;
+    current_revision_id: string;
+  }>(
+    db
+      .prepare(
+        `SELECT id, maker_user_id, taker_user_id, status, current_revision_id
+         FROM bets
+         WHERE id = ?`,
+      )
+      .bind(action.betId),
+  );
+  if (!bet) {
+    throw new AppError(404, "BET_NOT_FOUND", "Matched bet not found.");
+  }
+  if (bet.maker_user_id !== user.id && bet.taker_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_BET_PARTICIPANT",
+      "Only the two participants can propose a change.",
+    );
+  }
+  if (bet.status !== "pending") {
+    throw new AppError(
+      409,
+      "BET_FINAL",
+      "Settled bets cannot be changed.",
+    );
+  }
+
+  const [currentWindows, proposedMarkets] = await Promise.all([
+    getBetRevisionWindows(bet.current_revision_id),
+    getMarketRevisionsForLegs(action.legs),
+  ]);
+  if (proposedMarkets.length !== action.legs.length) {
+    throw new AppError(
+      404,
+      "MARKET_NOT_FOUND",
+      "A selected market revision is missing.",
+    );
+  }
+  if (
+    !canAmendBet(bet.status, currentWindows) ||
+    !canAmendBet(
+      bet.status,
+      proposedMarkets.map((market) => ({
+        status: market.status,
+        closesAt: market.closes_at,
+      })),
+    ) ||
+    proposedMarkets.some(
+      (market) =>
+        market.current_revision_id !== market.market_revision_id,
+    )
+  ) {
+    throw new AppError(
+      409,
+      "BET_REVISION_STALE",
+      "Every current and proposed leg must still be open before its deadline.",
+    );
+  }
+
+  const existing = await first<{ id: string }>(
+    db
+      .prepare(
+        `SELECT id
+         FROM bet_revisions
+         WHERE bet_id = ? AND status = 'pending'
+         LIMIT 1`,
+      )
+      .bind(bet.id),
+  );
+  if (existing) {
+    throw new AppError(
+      409,
+      "BET_REVISION_PENDING",
+      "This bet already has a change awaiting a response.",
+    );
+  }
+  const nextRevision = await first<{ revision_number: number }>(
+    db
+      .prepare(
+        `SELECT COALESCE(MAX(revision_number), 0) + 1 AS revision_number
+         FROM bet_revisions
+         WHERE bet_id = ?`,
+      )
+      .bind(bet.id),
+  );
+  const revisionId = crypto.randomUUID();
+  const recipientUserId =
+    user.id === bet.maker_user_id
+      ? bet.taker_user_id
+      : bet.maker_user_id;
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `INSERT INTO bet_revisions
+          (id, bet_id, revision_number, maker_risk_cents, taker_risk_cents,
+           proposer_user_id, recipient_user_id, change_note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        revisionId,
+        bet.id,
+        nextRevision?.revision_number ?? 1,
+        action.makerRiskCents,
+        action.takerRiskCents,
+        user.id,
+        recipientUserId,
+        changeNote,
+      ),
+  ];
+  for (const leg of action.legs) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO bet_revision_legs
+            (id, bet_revision_id, market_id, market_revision_id,
+             maker_selection)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          revisionId,
+          leg.marketId,
+          leg.marketRevisionId,
+          leg.selection,
+        ),
+    );
+  }
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    if (String(error).toLowerCase().includes("unique")) {
+      throw new AppError(
+        409,
+        "BET_REVISION_PENDING",
+        "Another change proposal was submitted first.",
+      );
+    }
+    throw error;
+  }
+
+  await auditStatement(
+    db,
+    user.id,
+    "proposed_bet_revision",
+    "bet_revision",
+    revisionId,
+    {
+      betId: bet.id,
+      revisionNumber: nextRevision?.revision_number ?? 1,
+      changeNote,
+    },
+  ).run();
+}
+
+async function respondBetRevision(
+  user: AppUser,
+  betRevisionId: string,
+  decision: "accepted" | "rejected",
+): Promise<void> {
+  const db = getD1();
+  const revision = await first<{
+    id: string;
+    bet_id: string;
+    recipient_user_id: string;
+    status: BetRevisionStatus;
+    bet_status: BetStatus;
+    current_revision_id: string;
+  }>(
+    db
+      .prepare(
+        `SELECT br.id, br.bet_id, br.recipient_user_id, br.status,
+                b.status AS bet_status, b.current_revision_id
+         FROM bet_revisions br
+         JOIN bets b ON b.id = br.bet_id
+         WHERE br.id = ?`,
+      )
+      .bind(betRevisionId),
+  );
+  if (!revision) {
+    throw new AppError(
+      404,
+      "BET_REVISION_NOT_FOUND",
+      "Bet revision not found.",
+    );
+  }
+  if (revision.recipient_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_REVISION_RECIPIENT",
+      "Only the other participant can respond.",
+    );
+  }
+  if (
+    (decision === "accepted" &&
+      revision.status === "active" &&
+      revision.current_revision_id === revision.id) ||
+    (decision === "rejected" && revision.status === "rejected")
+  ) {
+    return;
+  }
+  if (revision.status !== "pending") {
+    throw new AppError(
+      409,
+      "BET_REVISION_FINAL",
+      "This proposal already has a response.",
+    );
+  }
+  if (decision === "rejected") {
+    const result = await db
+      .prepare(
+        `UPDATE bet_revisions
+         SET status = 'rejected', responded_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'pending' AND recipient_user_id = ?`,
+      )
+      .bind(revision.id, user.id)
+      .run();
+    if (result.meta.changes !== 1) {
+      throw new AppError(
+        409,
+        "BET_REVISION_FINAL",
+        "Another response was recorded first.",
+      );
+    }
+    await auditStatement(
+      db,
+      user.id,
+      "rejected_bet_revision",
+      "bet_revision",
+      revision.id,
+      { betId: revision.bet_id },
+    ).run();
+    return;
+  }
+
+  const [currentWindows, proposedWindows] = await Promise.all([
+    getBetRevisionWindows(revision.current_revision_id),
+    getBetRevisionWindows(revision.id),
+  ]);
+  if (
+    !canAmendBet(revision.bet_status, currentWindows) ||
+    !canAmendBet(revision.bet_status, proposedWindows)
+  ) {
+    throw new AppError(
+      409,
+      "BET_REVISION_STALE",
+      "A leg closed or resolved before this change was accepted.",
+    );
+  }
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE bets
+         SET current_revision_id = ?,
+             maker_risk_cents = (
+               SELECT maker_risk_cents FROM bet_revisions WHERE id = ?
+             ),
+             taker_risk_cents = (
+               SELECT taker_risk_cents FROM bet_revisions WHERE id = ?
+             )
+         WHERE id = ?
+           AND status = 'pending'
+           AND current_revision_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM bet_revisions proposal
+             WHERE proposal.id = ?
+               AND proposal.bet_id = bets.id
+               AND proposal.status = 'pending'
+               AND proposal.recipient_user_id = ?
+               AND EXISTS (
+                 SELECT 1 FROM bet_revision_legs proposed
+                 WHERE proposed.bet_revision_id = proposal.id
+               )
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM bet_revision_legs current_leg
+                 JOIN market_revisions current_market
+                   ON current_market.id = current_leg.market_revision_id
+                 WHERE current_leg.bet_revision_id = bets.current_revision_id
+                   AND (
+                     current_market.status <> 'open'
+                     OR datetime(current_market.closes_at) <= CURRENT_TIMESTAMP
+                   )
+               )
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM bet_revision_legs proposed_leg
+                 JOIN market_revisions proposed_market
+                   ON proposed_market.id = proposed_leg.market_revision_id
+                 WHERE proposed_leg.bet_revision_id = proposal.id
+                   AND (
+                     proposed_market.status <> 'open'
+                     OR datetime(proposed_market.closes_at) <= CURRENT_TIMESTAMP
+                   )
+               )
+           )`,
+      )
+      .bind(
+        revision.id,
+        revision.id,
+        revision.id,
+        revision.bet_id,
+        revision.current_revision_id,
+        revision.id,
+        user.id,
+      ),
+    db
+      .prepare(
+        `UPDATE bet_revisions
+         SET status = 'superseded', responded_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'active'
+           AND EXISTS (
+             SELECT 1
+             FROM bets b
+             JOIN bet_revisions proposal
+               ON proposal.id = b.current_revision_id
+             WHERE b.id = bet_revisions.bet_id
+               AND b.status = 'pending'
+               AND b.current_revision_id = ?
+               AND proposal.status = 'pending'
+           )`,
+      )
+      .bind(revision.current_revision_id, revision.id),
+    db
+      .prepare(
+        `UPDATE bet_revisions
+         SET status = 'active', responded_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'pending'
+           AND recipient_user_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM bets b
+             WHERE b.id = bet_revisions.bet_id
+               AND b.status = 'pending'
+               AND b.current_revision_id = bet_revisions.id
+           )`,
+      )
+      .bind(revision.id, user.id),
+  ]);
+  if (
+    results[0].meta.changes !== 1 ||
+    results[1].meta.changes !== 1 ||
+    results[2].meta.changes !== 1
+  ) {
+    throw new AppError(
+      409,
+      "BET_REVISION_STALE",
+      "The bet or one of its legs changed before this response.",
+    );
+  }
+
+  await auditStatement(
+    db,
+    user.id,
+    "accepted_bet_revision",
+    "bet_revision",
+    revision.id,
+    { betId: revision.bet_id },
+  ).run();
+}
+
+async function cancelBetRevision(
+  user: AppUser,
+  betRevisionId: string,
+): Promise<void> {
+  const db = getD1();
+  const result = await db
+    .prepare(
+      `UPDATE bet_revisions
+       SET status = 'cancelled', responded_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'pending' AND proposer_user_id = ?`,
+    )
+    .bind(betRevisionId, user.id)
+    .run();
+  if (result.meta.changes !== 1) {
+    const revision = await first<{
+      proposer_user_id: string;
+      status: BetRevisionStatus;
+    }>(
+      db
+        .prepare(
+          `SELECT proposer_user_id, status
+           FROM bet_revisions
+           WHERE id = ?`,
+        )
+        .bind(betRevisionId),
+    );
+    if (!revision) {
+      throw new AppError(
+        404,
+        "BET_REVISION_NOT_FOUND",
+        "Bet revision not found.",
+      );
+    }
+    if (revision.proposer_user_id !== user.id) {
+      throw new AppError(
+        403,
+        "NOT_REVISION_PROPOSER",
+        "Only the proposer can cancel this change.",
+      );
+    }
+    if (revision.status === "cancelled") return;
+    throw new AppError(
+      409,
+      "BET_REVISION_FINAL",
+      "This proposal already has a response.",
+    );
+  }
+
+  await auditStatement(
+    db,
+    user.id,
+    "cancelled_bet_revision",
+    "bet_revision",
+    betRevisionId,
+  ).run();
 }
 
 async function proposeOfflineSettlement(
@@ -1234,13 +2006,14 @@ async function settlePendingBets(): Promise<void> {
   const db = getD1();
   const pendingLegs = await all<PendingBetLegRow>(
     db.prepare(
-      `SELECT b.id AS bet_id, b.offer_id, b.maker_user_id, b.taker_user_id,
-              b.maker_risk_cents, b.taker_risk_cents,
-              l.maker_selection, m.status AS market_status,
-              m.winning_selection
+      `SELECT b.id AS bet_id, b.maker_user_id, b.taker_user_id,
+              br.maker_risk_cents, br.taker_risk_cents,
+              l.maker_selection, mr.status AS market_status,
+              mr.winning_selection
        FROM bets b
-       JOIN offer_legs l ON l.offer_id = b.offer_id
-       JOIN markets m ON m.id = l.market_id
+       JOIN bet_revisions br ON br.id = b.current_revision_id
+       JOIN bet_revision_legs l ON l.bet_revision_id = br.id
+       JOIN market_revisions mr ON mr.id = l.market_revision_id
        WHERE b.status = 'pending'
        ORDER BY b.id`,
     ),
@@ -1330,30 +2103,57 @@ async function currentPairBalances() {
   );
 }
 
-async function getMarketsByIds(ids: string[]): Promise<
+async function getMarketRevisionsForLegs(
+  legs: ReadonlyArray<{
+    marketId: string;
+    marketRevisionId: string;
+  }>,
+): Promise<
   Array<{
-    id: string;
+    market_id: string;
+    market_revision_id: string;
+    current_revision_id: string;
     status: MarketStatus;
     closes_at: string;
     creator_user_id: string;
   }>
 > {
-  if (ids.length === 0) return [];
-  const placeholders = ids.map(() => "?").join(", ");
-  return all(
+  if (legs.length === 0) return [];
+  const revisionIds = legs.map((leg) => leg.marketRevisionId);
+  const placeholders = revisionIds.map(() => "?").join(", ");
+  const revisionRows = await all<{
+    market_id: string;
+    market_revision_id: string;
+    current_revision_id: string;
+    status: MarketStatus;
+    closes_at: string;
+    creator_user_id: string;
+  }>(
     getD1()
       .prepare(
-        `SELECT id, status, closes_at, creator_user_id
-         FROM markets
-         WHERE id IN (${placeholders})`,
+        `SELECT m.id AS market_id, mr.id AS market_revision_id,
+                m.current_revision_id, mr.status, mr.closes_at,
+                m.creator_user_id
+         FROM market_revisions mr
+         JOIN markets m ON m.id = mr.market_id
+         WHERE mr.id IN (${placeholders})`,
       )
-      .bind(...ids),
+      .bind(...revisionIds),
   );
+  return legs.flatMap((leg) => {
+    const match = revisionRows.find(
+      (row) =>
+        row.market_id === leg.marketId &&
+        row.market_revision_id === leg.marketRevisionId,
+    );
+    return match ? [match] : [];
+  });
 }
 
 async function getMarketsForOffer(offerId: string): Promise<
   Array<{
-    id: string;
+    market_id: string;
+    market_revision_id: string;
     status: MarketStatus;
     closes_at: string;
     creator_user_id: string;
@@ -1362,13 +2162,37 @@ async function getMarketsForOffer(offerId: string): Promise<
   return all(
     getD1()
       .prepare(
-        `SELECT m.id, m.status, m.closes_at, m.creator_user_id
+        `SELECT m.id AS market_id, mr.id AS market_revision_id,
+                mr.status, mr.closes_at, m.creator_user_id
          FROM offer_legs l
          JOIN markets m ON m.id = l.market_id
+         JOIN market_revisions mr ON mr.id = l.market_revision_id
          WHERE l.offer_id = ?`,
       )
       .bind(offerId),
   );
+}
+
+async function getBetRevisionWindows(
+  betRevisionId: string,
+): Promise<Array<{ status: MarketStatus; closesAt: string }>> {
+  const rowsForRevision = await all<{
+    status: MarketStatus;
+    closes_at: string;
+  }>(
+    getD1()
+      .prepare(
+        `SELECT mr.status, mr.closes_at
+         FROM bet_revision_legs brl
+         JOIN market_revisions mr ON mr.id = brl.market_revision_id
+         WHERE brl.bet_revision_id = ?`,
+      )
+      .bind(betRevisionId),
+  );
+  return rowsForRevision.map((row) => ({
+    status: row.status,
+    closesAt: row.closes_at,
+  }));
 }
 
 function debtInsertStatement(
@@ -1417,9 +2241,13 @@ function auditStatement(
     );
 }
 
-function toLegViews(rowsForOffer: OfferLegRow[]) {
-  return rowsForOffer.map((leg) => ({
+function toLegViews(
+  revisionLegs: ReadonlyArray<OfferLegRow | BetRevisionLegRow>,
+) {
+  return revisionLegs.map((leg) => ({
     marketId: leg.market_id,
+    marketRevisionId: leg.market_revision_id,
+    marketRevisionNumber: leg.market_revision_number,
     marketQuestion: leg.market_question,
     marketClosesAt: leg.market_closes_at,
     makerSelection: leg.maker_selection,
@@ -1456,77 +2284,6 @@ function groupBy<T, K>(
     else grouped.set(key, [item]);
   }
   return grouped;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new AppError(400, "INVALID_BODY", "Expected a JSON object.");
-  }
-  return value as Record<string, unknown>;
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new AppError(400, "INVALID_FIELD", `${field} is required.`);
-  }
-  if (value.length > MAX_TEXT_LENGTH) {
-    throw new AppError(400, "FIELD_TOO_LONG", `${field} is too long.`);
-  }
-  return value.trim();
-}
-
-function optionalString(value: unknown, field: string): string {
-  if (value === undefined || value === null) return "";
-  if (typeof value !== "string") {
-    throw new AppError(400, "INVALID_FIELD", `${field} must be text.`);
-  }
-  if (value.length > MAX_TEXT_LENGTH) {
-    throw new AppError(400, "FIELD_TOO_LONG", `${field} is too long.`);
-  }
-  return value.trim();
-}
-
-function requiredId(value: unknown, field: string): string {
-  const id = requiredString(value, field);
-  if (id.length > 100) {
-    throw new AppError(400, "INVALID_ID", `${field} is invalid.`);
-  }
-  return id;
-}
-
-function optionalId(value: unknown, field: string): string | undefined {
-  if (value === undefined || value === null || value === "") return undefined;
-  return requiredId(value, field);
-}
-
-function requiredMoney(value: unknown, field: string): number {
-  if (typeof value !== "number" || !isValidMoneyTerm(value)) {
-    throw new AppError(
-      400,
-      "INVALID_MONEY",
-      `${field} must be positive whole cents.`,
-    );
-  }
-  return value;
-}
-
-function requiredLegs(
-  value: unknown,
-): Array<{ marketId: string; selection: Selection }> {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new AppError(400, "LEGS_REQUIRED", "Choose at least one selection.");
-  }
-  return value.map((rawLeg) => {
-    const leg = asRecord(rawLeg);
-    const selection = requiredString(leg.selection, "selection");
-    if (selection !== "a" && selection !== "b") {
-      throw new AppError(400, "INVALID_SELECTION", "Choose side A or B.");
-    }
-    return {
-      marketId: requiredId(leg.marketId, "marketId"),
-      selection,
-    };
-  });
 }
 
 function boundedText(

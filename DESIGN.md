@@ -61,6 +61,13 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
 - Public ledgers pair free-text search with pressed-state status filters, keep
   filtered and total counts visible, and offer a one-action reset when no
   records match.
+- Numbered revision badges identify the exact terms used by each offer and bet.
+  Revision timelines are append-only and show author, timestamp, change note,
+  status, and the meaningful before/after fields.
+- A proposed matched-bet revision always appears beside the still-active terms
+  in an explicit old-versus-new comparison. Acceptance and rejection are
+  visually distinct, and the interface states that nothing changes before the
+  other participant accepts.
 
 ## Responsive behavior
 
