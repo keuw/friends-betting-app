@@ -1997,11 +1997,14 @@ Implementation:
   narrow-screen styles in `app/globals.css`.
 - [x] Update `DESIGN.md` with score-strip drill-down and viewer-specific live
   bet filter behavior.
-- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run db:generate`, and `npm run build`; confirm no
   migration and no matched-bet, void, settlement, or authentication regression.
-- [ ] Inspect the shortcut from Board, Matched bets, Settle up, and Markets,
+- [/] Inspect the shortcut from Board, Matched bets, Settle up, and Markets,
   plus zero/nonzero My live states at desktop and mobile widths.
+  Browser inspection remains pending because no controllable browser backend
+  was available in this session; bundle, responsive-style, and state semantics
+  are covered by the automated regressions.
 - [ ] Commit and push the exact verified source, deploy a saved Sites version,
   and verify the new shortcut and My live filter in the production bundle.
 
