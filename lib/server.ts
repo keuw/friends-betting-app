@@ -1015,7 +1015,7 @@ async function deleteMarket(
   if (market.creator_user_id !== user.id) {
     throw new AppError(
       403,
-      "NOT_MARKET_ORACLE",
+      "NOT_MARKET_CREATOR",
       "Only the market creator can delete it.",
     );
   }
@@ -1025,7 +1025,7 @@ async function deleteMarket(
   ) {
     throw new AppError(
       409,
-      "MARKET_REFERENCED",
+      "MARKET_IN_USE",
       "This market has offer or matched-bet history and cannot be deleted.",
     );
   }
@@ -2531,7 +2531,15 @@ async function respondBetVoid(
            SELECT ?, ?, 'rejected_bet_void', 'bet_void_request', vr.id,
                   json_object('betId', vr.bet_id)
            FROM bet_void_requests vr
-           WHERE vr.id = ? AND vr.status = 'rejected'`,
+           WHERE vr.id = ?
+             AND vr.status = 'rejected'
+             AND NOT EXISTS (
+               SELECT 1
+               FROM audit_events existing
+               WHERE existing.action = 'rejected_bet_void'
+                 AND existing.entity_type = 'bet_void_request'
+                 AND existing.entity_id = vr.id
+             )`,
         )
         .bind(crypto.randomUUID(), user.id, request.id),
     ]);
@@ -2606,7 +2614,14 @@ async function respondBetVoid(
          JOIN bets b ON b.id = vr.bet_id
          WHERE vr.id = ?
            AND vr.status = 'accepted'
-           AND b.status = 'void'`,
+           AND b.status = 'void'
+           AND NOT EXISTS (
+             SELECT 1
+             FROM audit_events existing
+             WHERE existing.action = 'accepted_bet_void'
+               AND existing.entity_type = 'bet_void_request'
+               AND existing.entity_id = vr.id
+           )`,
       )
       .bind(crypto.randomUUID(), user.id, request.id),
   ]);
@@ -2645,28 +2660,38 @@ async function cancelBetVoid(
   betVoidRequestId: string,
 ): Promise<void> {
   const db = getD1();
-  const results = await db.batch([
-    db
-      .prepare(
-        `UPDATE bet_void_requests
-         SET status = 'cancelled', responded_at = CURRENT_TIMESTAMP
-         WHERE id = ?
-           AND status = 'pending'
-           AND requester_user_id = ?`,
-      )
-      .bind(betVoidRequestId, user.id),
-    db
+  const update = await db
+    .prepare(
+      `UPDATE bet_void_requests
+       SET status = 'cancelled', responded_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+         AND status = 'pending'
+         AND requester_user_id = ?`,
+    )
+    .bind(betVoidRequestId, user.id)
+    .run();
+  if (update.meta.changes === 1) {
+    await db
       .prepare(
         `INSERT INTO audit_events
           (id, actor_user_id, action, entity_type, entity_id, metadata_json)
          SELECT ?, ?, 'cancelled_bet_void', 'bet_void_request', vr.id,
                 json_object('betId', vr.bet_id)
          FROM bet_void_requests vr
-         WHERE vr.id = ? AND vr.status = 'cancelled'`,
+         WHERE vr.id = ?
+           AND vr.status = 'cancelled'
+           AND NOT EXISTS (
+             SELECT 1
+             FROM audit_events existing
+             WHERE existing.action = 'cancelled_bet_void'
+               AND existing.entity_type = 'bet_void_request'
+               AND existing.entity_id = vr.id
+           )`,
       )
-      .bind(crypto.randomUUID(), user.id, betVoidRequestId),
-  ]);
-  if (results[0].meta.changes === 1) return;
+      .bind(crypto.randomUUID(), user.id, betVoidRequestId)
+      .run();
+    return;
+  }
 
   const request = await first<{
     requester_user_id: string;

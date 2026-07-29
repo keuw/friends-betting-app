@@ -1692,7 +1692,9 @@ button.brand-lockup {
 
 .revision-proposal,
 .bet-revision-editor,
-.revision-history {
+.revision-history,
+.void-request-proposal,
+.void-request-form {
   margin-top: 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -1762,6 +1764,74 @@ button.brand-lockup {
 
 .revision-response-actions {
   margin-top: 0.75rem;
+}
+
+.void-request-proposal {
+  padding: 0.9rem;
+  border-color: rgba(166, 45, 37, 0.45);
+  background: var(--surface-danger);
+}
+
+.void-agreement-summary {
+  margin-top: 0.9rem;
+  padding: 0.7rem;
+  border-left: 3px solid var(--ink);
+  background: var(--cream);
+}
+
+.void-agreement-summary strong {
+  font-size: 0.68rem;
+}
+
+.void-agreement-summary p {
+  margin: 0.28rem 0 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.void-request-reason {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.void-request-guardrail {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--danger);
+  background: rgba(255, 253, 247, 0.75);
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+.void-request-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.9rem;
+}
+
+.void-request-form h4,
+.void-request-form p {
+  margin: 0;
+}
+
+.void-request-form p,
+.void-request-form label > span {
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+.void-request-form textarea {
+  min-height: 5rem;
+}
+
+.void-request-history {
+  border-color: rgba(166, 45, 37, 0.3);
 }
 
 .bet-terms-summary {
@@ -2375,6 +2445,64 @@ button.brand-lockup {
 .market-row-controls .button-quiet {
   min-height: 2.35rem;
   padding: 0.45rem 0.6rem;
+}
+
+.market-delete-blocker {
+  margin: 0.65rem 0 0 !important;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--line);
+  background: var(--cream);
+  color: var(--muted);
+  font-size: 0.62rem !important;
+}
+
+.market-delete-panel {
+  margin-top: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(166, 45, 37, 0.55);
+  border-radius: var(--radius-sm);
+  background: var(--surface-danger);
+}
+
+.market-delete-panel > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.market-delete-panel > div:first-child span {
+  color: var(--danger);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+}
+
+.market-delete-panel > div:first-child strong {
+  font-size: 0.8rem;
+}
+
+.market-delete-panel p {
+  margin: 0.6rem 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.market-delete-panel > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.market-delete-panel button {
+  min-height: 2.5rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.market-delete-panel .delete-confirm {
+  border-color: var(--danger);
+  background: var(--danger);
 }
 
 .market-edit-form {

@@ -91,7 +91,14 @@ export function BettingApp({
         });
         const payload = await response.json();
         if (!response.ok) {
-          if (apiErrorCode(payload) === "COUNTER_STALE") {
+          const errorCode = apiErrorCode(payload);
+          if (
+            errorCode === "COUNTER_STALE" ||
+            errorCode === "MARKET_IN_USE" ||
+            errorCode === "MARKET_CHANGED" ||
+            errorCode === "BET_VOID_STALE" ||
+            errorCode === "BET_REVISION_STALE"
+          ) {
             const refreshResponse = await fetch("/api/state", {
               cache: "no-store",
             });
@@ -1057,8 +1064,16 @@ function BetCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [requestingVoid, setRequestingVoid] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
   const pendingRevision = bet.revisions.find(
     (revision) => revision.status === "pending",
+  );
+  const pendingVoidRequest = bet.voidRequests.find(
+    (request) => request.status === "pending",
+  );
+  const acceptedVoidRequest = bet.voidRequests.find(
+    (request) => request.status === "accepted",
   );
   const activeRevision = bet.revisions.find(
     (revision) => revision.id === bet.currentRevisionId,
@@ -1101,6 +1116,17 @@ function BetCard({
           <b>{money(bet.takerRiskCents)}</b>
         </div>
       </div>
+
+      {bet.status === "void" && acceptedVoidRequest && (
+        <div className="void-agreement-summary">
+          <strong>Voided by mutual agreement</strong>
+          <p>
+            {acceptedVoidRequest.requesterName} and{" "}
+            {acceptedVoidRequest.recipientName} ended this pending bet with no
+            debt. Reason: “{acceptedVoidRequest.reason}”
+          </p>
+        </div>
+      )}
 
       {pendingRevision && (
         <section className="revision-proposal" aria-label="Pending bet revision">
@@ -1200,6 +1226,92 @@ function BetCard({
         </section>
       )}
 
+      {pendingVoidRequest && (
+        <section
+          className="void-request-proposal"
+          aria-label="Pending mutual void request"
+        >
+          <div className="revision-proposal-head">
+            <div>
+              <span>MUTUAL VOID REQUEST</span>
+              <strong>
+                {pendingVoidRequest.requesterName} asks{" "}
+                {pendingVoidRequest.recipientName}
+              </strong>
+            </div>
+            <StatusBadge status={pendingVoidRequest.status} />
+          </div>
+          <p className="void-request-reason">
+            “{pendingVoidRequest.reason}”
+          </p>
+          <p className="void-request-guardrail">
+            Based on bet v{pendingVoidRequest.baseRevisionNumber}. The bet stays
+            active until the other participant accepts.
+          </p>
+          {(pendingVoidRequest.canRespond ||
+            pendingVoidRequest.canCancel) && (
+            <div className="revision-response-actions">
+              {pendingVoidRequest.canRespond && (
+                <>
+                  <button
+                    type="button"
+                    className="button-accept"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void onAction(
+                        {
+                          type: "respond_bet_void",
+                          betVoidRequestId: pendingVoidRequest.id,
+                          decision: "accepted",
+                        },
+                        "Both sides agreed. The matched bet is void with no debt.",
+                      )
+                    }
+                  >
+                    Agree and void bet
+                  </button>
+                  <button
+                    type="button"
+                    className="button-quiet"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void onAction(
+                        {
+                          type: "respond_bet_void",
+                          betVoidRequestId: pendingVoidRequest.id,
+                          decision: "rejected",
+                        },
+                        "Void request declined. The matched bet stays active.",
+                      )
+                    }
+                  >
+                    Keep bet active
+                  </button>
+                </>
+              )}
+              {pendingVoidRequest.canCancel && (
+                <button
+                  type="button"
+                  className="button-quiet"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void onAction(
+                      {
+                        type: "cancel_bet_void",
+                        betVoidRequestId: pendingVoidRequest.id,
+                      },
+                      "Void request cancelled. The matched bet stays active.",
+                    )
+                  }
+                >
+                  Cancel request
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {editing && (
         <BetRevisionEditor
           bet={bet}
@@ -1208,6 +1320,65 @@ function BetCard({
           onAction={onAction}
           onDone={() => setEditing(false)}
         />
+      )}
+
+      {requestingVoid && bet.canRequestVoid && (
+        <form
+          className="void-request-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onAction(
+              {
+                type: "request_bet_void",
+                betId: bet.id,
+                reason: voidReason,
+              },
+              "Void request sent. Your friend must agree before anything changes.",
+            ).then(() => {
+              setRequestingVoid(false);
+              setVoidReason("");
+            });
+          }}
+        >
+          <div className="revision-editor-head">
+            <div>
+              <span>REQUEST MUTUAL VOID</span>
+              <h4>Ask the other side to cancel this match</h4>
+            </div>
+            <span>No debt unless settled normally</span>
+          </div>
+          <p>
+            Explain why. Your request and their response remain in the public
+            bet history.
+          </p>
+          <label>
+            <span>Reason</span>
+            <textarea
+              value={voidReason}
+              onChange={(event) => setVoidReason(event.target.value)}
+              placeholder="We entered the wrong terms…"
+              minLength={3}
+              maxLength={200}
+              required
+            />
+          </label>
+          <div className="revision-editor-actions">
+            <button
+              type="submit"
+              className="button-accept"
+              disabled={busy !== null || voidReason.trim().length < 3}
+            >
+              Send void request
+            </button>
+            <button
+              type="button"
+              className="button-quiet"
+              onClick={() => setRequestingVoid(false)}
+            >
+              Keep bet
+            </button>
+          </div>
+        </form>
       )}
 
       <div className="bet-revision-actions">
@@ -1221,13 +1392,23 @@ function BetCard({
             {editing ? "Close editor" : "Propose change"}
           </button>
         )}
+        {bet.canRequestVoid && (
+          <button
+            type="button"
+            className="button-quiet danger"
+            disabled={busy !== null}
+            onClick={() => setRequestingVoid((current) => !current)}
+          >
+            {requestingVoid ? "Close void request" : "Request mutual void"}
+          </button>
+        )}
         <button
           type="button"
           className="button-quiet"
           aria-expanded={showHistory}
           onClick={() => setShowHistory((current) => !current)}
         >
-          Revision history ({bet.revisions.length})
+          Bet history ({bet.revisions.length + bet.voidRequests.length})
         </button>
       </div>
 
@@ -1239,6 +1420,9 @@ function BetCard({
           currentRevisionId={bet.currentRevisionId}
         />
       )}
+      {showHistory && bet.voidRequests.length > 0 && (
+        <VoidRequestHistory requests={bet.voidRequests} />
+      )}
 
       {bet.isParticipant && (
         <span className="participant-ribbon">
@@ -1249,6 +1433,37 @@ function BetCard({
         </span>
       )}
     </article>
+  );
+}
+
+function VoidRequestHistory({
+  requests,
+}: {
+  requests: BetView["voidRequests"];
+}) {
+  return (
+    <section className="revision-history void-request-history">
+      <div className="revision-history-head">
+        <span>Mutual void history</span>
+        <small>Requests and responses stay public</small>
+      </div>
+      {requests
+        .slice()
+        .reverse()
+        .map((request) => (
+          <div className="revision-history-row" key={request.id}>
+            <div>
+              <strong>Bet v{request.baseRevisionNumber}</strong>
+              <StatusBadge status={request.status} />
+            </div>
+            <p>“{request.reason}”</p>
+            <small>
+              {request.requesterName} asked {request.recipientName} ·{" "}
+              {relativeTime(request.createdAt)}
+            </small>
+          </div>
+        ))}
+    </section>
   );
 }
 
@@ -2019,6 +2234,7 @@ function MarketCard({
   const [renderedAt] = useState(Date.now);
   const [editing, setEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [deleteArmed, setDeleteArmed] = useState(false);
   const currentRevision =
     market.revisions.find((revision) => revision.isCurrent) ??
     market.revisions[0];
@@ -2096,8 +2312,64 @@ function MarketCard({
           >
             Revision history ({market.revisions.length})
           </button>
+          {market.createdByMe && market.canDelete && (
+            <button
+              type="button"
+              className="button-quiet danger"
+              disabled={busy !== null}
+              aria-expanded={deleteArmed}
+              onClick={() => setDeleteArmed((current) => !current)}
+            >
+              {deleteArmed ? "Close delete panel" : "Delete market"}
+            </button>
+          )}
         </div>
       </div>
+
+      {market.createdByMe && market.deletionBlocker && (
+        <p className="market-delete-blocker">
+          Cannot delete: {market.deletionBlocker}
+        </p>
+      )}
+
+      {deleteArmed && market.canDelete && (
+        <section className="market-delete-panel" aria-label="Delete market">
+          <div>
+            <span>PERMANENT DELETE</span>
+            <strong>Remove this unused market?</strong>
+          </div>
+          <p>
+            This removes all {market.revisions.length} market revision
+            {market.revisions.length === 1 ? "" : "s"}. A minimal deletion
+            receipt remains in activity history.
+          </p>
+          <div>
+            <button
+              type="button"
+              className="button-dark delete-confirm"
+              disabled={busy !== null}
+              onClick={() =>
+                void onAction(
+                  {
+                    type: "delete_market",
+                    marketId: market.id,
+                  },
+                  "Unused market and its revisions permanently deleted.",
+                )
+              }
+            >
+              Permanently delete
+            </button>
+            <button
+              type="button"
+              className="button-quiet"
+              onClick={() => setDeleteArmed(false)}
+            >
+              Keep market
+            </button>
+          </div>
+        </section>
+      )}
 
       {currentRevision?.canResolve && (
         <MarketRevisionResolveActions

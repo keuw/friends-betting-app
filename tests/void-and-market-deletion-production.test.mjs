@@ -35,7 +35,7 @@ test(
         marketId: unused.id,
       });
       assert.equal(observerDelete.status, 403);
-      assert.equal(observerDelete.payload.error?.code, "NOT_MARKET_ORACLE");
+      assert.equal(observerDelete.payload.error?.code, "NOT_MARKET_CREATOR");
 
       const ownerView = marketFrom(await getState(baseUrl, maker), unused.id);
       assert.equal(ownerView.offerReferenceCount, 0);
@@ -108,6 +108,32 @@ test(
         200,
       );
 
+      const voidUnused = await createMarket(
+        baseUrl,
+        maker,
+        `Voided unused deletion ${stamp}`,
+      );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "resolve_market",
+            marketId: voidUnused.id,
+            marketRevisionId: voidUnused.currentRevisionId,
+            result: "void",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "delete_market",
+            marketId: voidUnused.id,
+          })
+        ).status,
+        200,
+      );
+
       const offerMarket = await createMarket(
         baseUrl,
         maker,
@@ -137,7 +163,40 @@ test(
       assert.equal(blockedOfferDelete.status, 409);
       assert.equal(
         blockedOfferDelete.payload.error?.code,
-        "MARKET_REFERENCED",
+        "MARKET_IN_USE",
+      );
+
+      const expiredOfferMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Expired offer blocker ${stamp}`,
+      );
+      const expiringOffer = await createOffer(
+        baseUrl,
+        maker,
+        expiredOfferMarket,
+      );
+      const expiredOfferResolution = await postAction(baseUrl, maker, {
+        type: "resolve_market",
+        marketId: expiredOfferMarket.id,
+        marketRevisionId: expiredOfferMarket.currentRevisionId,
+        result: "a",
+      });
+      assert.equal(expiredOfferResolution.status, 200);
+      assert.equal(
+        expiredOfferResolution.payload.offers.find(
+          (candidate) => candidate.id === expiringOffer.id,
+        )?.status,
+        "expired",
+      );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "delete_market",
+            marketId: expiredOfferMarket.id,
+          })
+        ).status,
+        409,
       );
 
       const betMarket = await createMarket(
@@ -335,6 +394,137 @@ test(
         assert.equal(raceFinal.status, "pending");
         assert.equal(finalVoid?.status, "superseded");
         assert.equal(finalRevision?.status, "active");
+      }
+
+      const responseRaceMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Void response race ${stamp}`,
+      );
+      const responseRaceOffer = await createOffer(
+        baseUrl,
+        maker,
+        responseRaceMarket,
+      );
+      const responseRaceAcceptance = await postAction(baseUrl, taker, {
+        type: "accept_offer",
+        offerId: responseRaceOffer.id,
+      });
+      assert.equal(responseRaceAcceptance.status, 200);
+      const responseRaceBet = betForMarket(
+        responseRaceAcceptance.payload,
+        responseRaceMarket.id,
+      );
+      const responseRaceRequestResult = await postAction(baseUrl, maker, {
+        type: "request_bet_void",
+        betId: responseRaceBet.id,
+        reason: "Only one opposing response may become final.",
+      });
+      assert.equal(responseRaceRequestResult.status, 200);
+      const responseRaceRequest = betById(
+        responseRaceRequestResult.payload,
+        responseRaceBet.id,
+      ).voidRequests.at(-1);
+      assert.ok(responseRaceRequest);
+      const responseRace = await Promise.all([
+        postAction(baseUrl, taker, {
+          type: "respond_bet_void",
+          betVoidRequestId: responseRaceRequest.id,
+          decision: "accepted",
+        }),
+        postAction(baseUrl, taker, {
+          type: "respond_bet_void",
+          betVoidRequestId: responseRaceRequest.id,
+          decision: "rejected",
+        }),
+      ]);
+      assert.deepEqual(
+        responseRace.map((result) => result.status).sort(),
+        [200, 409],
+      );
+      const responseRaceFinal = betById(
+        await getState(baseUrl, maker),
+        responseRaceBet.id,
+      );
+      const responseRaceFinalRequest = responseRaceFinal.voidRequests.find(
+        (request) => request.id === responseRaceRequest.id,
+      );
+      assert.ok(
+        responseRaceFinalRequest?.status === "accepted" ||
+          responseRaceFinalRequest?.status === "rejected",
+      );
+      assert.equal(
+        responseRaceFinal.status,
+        responseRaceFinalRequest.status === "accepted" ? "void" : "pending",
+      );
+
+      const resolutionRaceMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Resolution void race ${stamp}`,
+      );
+      const resolutionRaceOffer = await createOffer(
+        baseUrl,
+        maker,
+        resolutionRaceMarket,
+      );
+      const resolutionRaceAcceptance = await postAction(baseUrl, taker, {
+        type: "accept_offer",
+        offerId: resolutionRaceOffer.id,
+      });
+      assert.equal(resolutionRaceAcceptance.status, 200);
+      const resolutionRaceBet = betForMarket(
+        resolutionRaceAcceptance.payload,
+        resolutionRaceMarket.id,
+      );
+      const resolutionRaceRequestResult = await postAction(baseUrl, maker, {
+        type: "request_bet_void",
+        betId: resolutionRaceBet.id,
+        reason: "Race mutual agreement against the market result.",
+      });
+      assert.equal(resolutionRaceRequestResult.status, 200);
+      const resolutionRaceRequest = betById(
+        resolutionRaceRequestResult.payload,
+        resolutionRaceBet.id,
+      ).voidRequests.at(-1);
+      assert.ok(resolutionRaceRequest);
+      const [voidAgainstResolution, marketResolution] = await Promise.all([
+        postAction(baseUrl, taker, {
+          type: "respond_bet_void",
+          betVoidRequestId: resolutionRaceRequest.id,
+          decision: "accepted",
+        }),
+        postAction(baseUrl, maker, {
+          type: "resolve_market",
+          marketId: resolutionRaceMarket.id,
+          marketRevisionId: resolutionRaceMarket.currentRevisionId,
+          result: "b",
+        }),
+      ]);
+      assert.ok([200, 409].includes(voidAgainstResolution.status));
+      assert.equal(marketResolution.status, 200);
+      const resolutionRaceState = await getState(baseUrl, maker);
+      const resolutionRaceFinal = betById(
+        resolutionRaceState,
+        resolutionRaceBet.id,
+      );
+      const resolutionRaceFinalRequest =
+        resolutionRaceFinal.voidRequests.find(
+          (request) => request.id === resolutionRaceRequest.id,
+        );
+      if (resolutionRaceFinal.status === "void") {
+        assert.equal(resolutionRaceFinalRequest?.status, "accepted");
+      } else {
+        assert.equal(resolutionRaceFinal.status, "taker_won");
+        assert.equal(resolutionRaceFinalRequest?.status, "superseded");
+        assert.equal(
+          resolutionRaceState.pairBalances.find(
+            (balance) =>
+              balance.debtorName === maker.name &&
+              balance.creditorName === taker.name,
+          )?.amountCents,
+          1_000,
+        );
       }
 
       const deletionRaceMarket = await createMarket(
