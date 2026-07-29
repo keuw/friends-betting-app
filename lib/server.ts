@@ -1033,7 +1033,20 @@ async function createCounteroffer(
              AND c.root_offer_id = ?
              AND c.status = 'pending'
              AND c.recipient_user_id = ?
-             AND o.status = 'open'`,
+             AND o.status = 'open'
+             AND EXISTS (
+               SELECT 1 FROM offer_legs l WHERE l.offer_id = o.id
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM offer_legs l
+               JOIN market_revisions mr ON mr.id = l.market_revision_id
+               WHERE l.offer_id = o.id
+                 AND (
+                   mr.status <> 'open'
+                   OR datetime(mr.closes_at) <= CURRENT_TIMESTAMP
+                 )
+             )`,
         )
         .bind(
           counterId,
@@ -1055,7 +1068,20 @@ async function createCounteroffer(
            FROM offers o
            WHERE o.id = ?
              AND o.status = 'open'
-             AND o.maker_user_id <> ?`,
+             AND o.maker_user_id <> ?
+             AND EXISTS (
+               SELECT 1 FROM offer_legs l WHERE l.offer_id = o.id
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM offer_legs l
+               JOIN market_revisions mr ON mr.id = l.market_revision_id
+               WHERE l.offer_id = o.id
+                 AND (
+                   mr.status <> 'open'
+                   OR datetime(mr.closes_at) <= CURRENT_TIMESTAMP
+                 )
+             )`,
         )
         .bind(
           counterId,
@@ -1191,19 +1217,32 @@ async function acceptOffer(
           `INSERT INTO bets
             (id, offer_id, maker_user_id, taker_user_id, maker_risk_cents,
              taker_risk_cents, accepted_counter_id, current_revision_id)
-           SELECT ?, id, maker_user_id, ?, ?, ?, ?, ?
-           FROM offers
-           WHERE id = ?
-             AND status = 'open'
+           SELECT ?, o.id, o.maker_user_id, ?, ?, ?, ?, ?
+           FROM offers o
+           WHERE o.id = ?
+             AND o.status = 'open'
              AND (
                ? IS NULL OR EXISTS (
                  SELECT 1
                  FROM counteroffers c
                  WHERE c.id = ?
-                   AND c.root_offer_id = offers.id
+                   AND c.root_offer_id = o.id
                    AND c.status = 'pending'
                    AND c.recipient_user_id = ?
                )
+             )
+             AND EXISTS (
+               SELECT 1 FROM offer_legs l WHERE l.offer_id = o.id
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM offer_legs l
+               JOIN market_revisions mr ON mr.id = l.market_revision_id
+               WHERE l.offer_id = o.id
+                 AND (
+                   mr.status <> 'open'
+                   OR datetime(mr.closes_at) <= CURRENT_TIMESTAMP
+                 )
              )`,
         )
         .bind(
@@ -1270,6 +1309,18 @@ async function acceptOffer(
              )`,
         )
         .bind(acceptedCounterId ?? "", root.id, betId),
+      conditionalAuditStatement(
+        db,
+        user.id,
+        "accepted_offer",
+        "bet",
+        betId,
+        "bets",
+        {
+          offerId: root.id,
+          acceptedCounterId,
+        },
+      ),
     ]);
     if (results[0].meta.changes !== 1) {
       throw new AppError(
@@ -1296,10 +1347,6 @@ async function acceptOffer(
     throw error;
   }
 
-  await auditStatement(db, user.id, "accepted_offer", "bet", betId, {
-    offerId: root.id,
-    acceptedCounterId,
-  }).run();
 }
 
 async function declineCounteroffer(
@@ -2380,7 +2427,7 @@ function conditionalAuditStatement(
   action: string,
   entityType: string,
   entityId: string,
-  entityTable: "counteroffers",
+  entityTable: "counteroffers" | "bets",
   metadata: Record<string, unknown> = {},
   extraPredicate = "1 = 1",
   extraBindings: unknown[] = [],

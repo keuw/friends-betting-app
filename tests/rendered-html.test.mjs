@@ -149,6 +149,8 @@ test("counteroffer recipients can decline without consuming the root offer", asy
   assert.match(serverBundle, /declined_counteroffer/);
   assert.match(serverBundle, /NOT_COUNTER_RECIPIENT/);
   assert.match(serverBundle, /COUNTER_STALE/);
+  assert.match(serverBundle, /datetime\(mr\.closes_at\).*CURRENT_TIMESTAMP/);
+  assert.match(serverBundle, /accepted_offer/);
   assert.match(clientBundle, /Decline/);
   assert.match(clientBundle, /Counter declined\. The original offer stays open\./);
 });

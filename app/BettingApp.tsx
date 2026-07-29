@@ -89,7 +89,17 @@ export function BettingApp({
           body: JSON.stringify(action),
         });
         const payload = await response.json();
-        if (!response.ok) throw new Error(apiMessage(payload));
+        if (!response.ok) {
+          if (apiErrorCode(payload) === "COUNTER_STALE") {
+            const refreshResponse = await fetch("/api/state", {
+              cache: "no-store",
+            });
+            if (refreshResponse.ok) {
+              setState((await refreshResponse.json()) as AppState);
+            }
+          }
+          throw new Error(apiMessage(payload));
+        }
         setState(payload as AppState);
         setNotice(successMessage);
       } catch (actionError) {
@@ -730,7 +740,7 @@ function OfferCard({
               void onAction(
                 { type: "cancel_offer", offerId: offer.id },
                 "Offer cancelled.",
-              )
+              ).catch(() => undefined)
             }
           >
             Cancel offer
@@ -745,7 +755,7 @@ function OfferCard({
                 void onAction(
                   { type: "accept_offer", offerId: offer.id },
                   "Bet matched. It is officially on the record.",
-                )
+                ).catch(() => undefined)
               }
             >
               Take the other side
@@ -808,7 +818,7 @@ function CounterRow({
                   counterId: counter.id,
                 },
                 "Counter accepted. The bet is matched.",
-              )
+              ).catch(() => undefined)
             }
           >
             Accept
@@ -831,7 +841,7 @@ function CounterRow({
                   counterId: counter.id,
                 },
                 "Counter declined. The original offer stays open.",
-              )
+              ).catch(() => undefined)
             }
           >
             Decline
@@ -876,16 +886,20 @@ function CounterForm({
     const makerRiskCents = toCents(makerRisk);
     const takerRiskCents = toCents(takerRisk);
     if (makerRiskCents < 1 || takerRiskCents < 1) return;
-    await onAction(
-      {
-        type: "create_counteroffer",
-        offerId: offer.id,
-        parentCounterId: parent?.id,
-        makerRiskCents,
-        takerRiskCents,
-      },
-      "Counteroffer sent.",
-    );
+    try {
+      await onAction(
+        {
+          type: "create_counteroffer",
+          offerId: offer.id,
+          parentCounterId: parent?.id,
+          makerRiskCents,
+          takerRiskCents,
+        },
+        "Counteroffer sent.",
+      );
+    } catch {
+      return;
+    }
     onDone();
   }
 
@@ -2479,6 +2493,21 @@ function apiMessage(payload: unknown): string {
     return payload.error.message;
   }
   return "The request could not be completed.";
+}
+
+function apiErrorCode(payload: unknown): string | null {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "error" in payload &&
+    payload.error &&
+    typeof payload.error === "object" &&
+    "code" in payload.error &&
+    typeof payload.error.code === "string"
+  ) {
+    return payload.error.code;
+  }
+  return null;
 }
 
 function messageOf(error: unknown): string {
