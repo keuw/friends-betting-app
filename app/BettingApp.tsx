@@ -2835,7 +2835,7 @@ function MarketEditForm({
         }`}
       >
         {extendsOpenOffers
-          ? `Deadline extensions update ${market.activeOfferReferenceCount} open offer${market.activeOfferReferenceCount === 1 ? "" : "s"} on this market. Each offer keeps its original version in public history.`
+          ? `Deadline extensions update ${market.extendableOfferReferenceCount} open offer${market.extendableOfferReferenceCount === 1 ? "" : "s"} on this market. Each offer keeps its original version in public history.`
           : termsChanged
             ? "Because other terms changed, existing offers keep their previous market version and deadline."
             : "Existing offers change only for a deadline-only extension."}

@@ -50,6 +50,7 @@ type MarketRow = {
   revision_number: number;
   offer_reference_count: number;
   active_offer_reference_count: number;
+  extendable_offer_reference_count: number;
   removable_offer_reference_count: number;
   bet_reference_count: number;
   created_at: string;
@@ -328,6 +329,14 @@ export async function getAppState(user: AppUser): Promise<AppState> {
                 FROM offer_legs ol
                 JOIN offers o ON o.id = ol.offer_id
                 WHERE ol.market_id = m.id
+                  AND ol.market_revision_id = m.current_revision_id
+                  AND o.status = 'open'
+              ) AS extendable_offer_reference_count,
+              (
+                SELECT COUNT(DISTINCT ol.offer_id)
+                FROM offer_legs ol
+                JOIN offers o ON o.id = ol.offer_id
+                WHERE ol.market_id = m.id
                   AND o.status IN ('cancelled', 'expired')
                   AND NOT EXISTS (
                     SELECT 1 FROM bets b WHERE b.offer_id = o.id
@@ -542,6 +551,8 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         revisionNumber: market.revision_number,
         offerReferenceCount: market.offer_reference_count,
         activeOfferReferenceCount: market.active_offer_reference_count,
+        extendableOfferReferenceCount:
+          market.extendable_offer_reference_count,
         removableOfferReferenceCount:
           market.removable_offer_reference_count,
         betReferenceCount: market.bet_reference_count,

@@ -34,6 +34,11 @@ test(
         originalClose,
       );
       const offer = await createOffer(baseUrl, maker, [leg(market)]);
+      assert.equal(
+        marketFrom(await getState(baseUrl, maker), market.id)
+          .extendableOfferReferenceCount,
+        1,
+      );
       const counterResponse = await postAction(baseUrl, taker, {
         type: "create_counteroffer",
         offerId: offer.id,
