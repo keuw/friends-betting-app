@@ -2166,7 +2166,7 @@ Implementation:
 - [x] Run unit, full built/D1 integration, lint, type, migration generation,
   and production build gates; inspect the generated migration and test the
   accept-versus-extension and concurrent-reopen races.
-- [ ] Commit and push the verified source, save and deploy a Sites version, and
+- [x] Commit and push the verified source, save and deploy a Sites version, and
   verify the live bundle and production endpoint.
 
 Acceptance:
