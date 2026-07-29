@@ -1912,6 +1912,111 @@ Acceptance:
 - No bet, debt, payment confirmation, market, offer, audit record, or Notion
   export behavior changes.
 
+### Phase 20 — Open the signed-in user's live bets from the score strip
+
+Turn the existing `My live bets` score into a clear navigation shortcut. A
+friend can select it from any signed-in tab and land directly on only their own
+unresolved matched bets, while the normal Matched bets destination continues to
+open the public Current ledger from Phase 19.
+
+Live-bet semantics:
+
+- Add `mine` to the typed `BetLedgerFilter` union and label it `My live`.
+- `My live` includes a bet only when `bet.isParticipant` is true and the stored
+  bet status is `pending`.
+- A pending bet remains live while its result is unresolved, including after
+  one or more markets close to additional offers. Market close time does not
+  independently remove a matched bet from this view.
+- Maker-won, taker-won, and voided bets are never included in My live.
+- The My live count is derived by the same pure helper used by the score strip
+  and filter control so the navigation promise and displayed cards cannot
+  disagree.
+- This remains a viewer-specific read filter over the already-authorized
+  `BetView.isParticipant` field. It introduces no new server trust decision.
+
+Navigation and state contract:
+
+- Render the `My live bets` metric as a semantic button with a visible
+  interactive affordance, existing paper tone, and an accessible name such as
+  `View 3 of your live bets`.
+- Selecting the metric sets the Matched bets filter to `My live` and navigates
+  to the Matched bets tab in one interaction.
+- The shortcut works from every app tab and also switches an already-open
+  Matched bets ledger from another filter to My live.
+- Add `My live` as the first explicit filter control before `Current`, with its
+  participant-specific count.
+- Selecting the normal `Matched bets` navigation button continues to open
+  `Current`, preserving the default Pending + Resolved public view and hidden
+  void history from Phase 19.
+- Move the matched-bet filter state to the signed-in app shell and pass it into
+  `BetsTab` as controlled state. Do not create competing parent and child
+  filters or use an effect to synchronize them.
+- If the signed-in user has zero live bets, the metric remains usable and opens
+  the existing filtered-empty state with `My live` selected and a route back to
+  All bets.
+
+Visual, responsive, and accessibility contract:
+
+- Preserve the score strip's three equal metrics; the actionable metric must
+  not grow, wrap the strip, or look like a primary destructive/submit action.
+- Use border/outline, hover, active, and a small directional affordance to make
+  the metric recognizably clickable while retaining the paper color role.
+- The button keeps a minimum 44px target, visible focus ring, and no
+  color-only indication of interactivity.
+- At the `680px` layout, the label, count, and affordance remain legible inside
+  the existing three-column score strip without horizontal overflow.
+- The selected My live filter uses the same pressed-state treatment, count
+  badge, keyboard behavior, wrapping, and live result count as every other
+  matched-bet filter.
+
+Data and architecture boundary:
+
+- Extend `lib/bet-ledger.ts`; do not duplicate the `isParticipant && pending`
+  predicate in the metric, filter bar, or component rendering.
+- Keep `BetStatus`, `BetView`, D1 queries, the 100-row response boundary, API
+  actions, authentication, settlement, debts, and Notion export unchanged.
+- Do not add personal bet visibility restrictions: Sidebet's full matched-bet
+  ledger remains public to signed-in friends. My live is only a convenience
+  filter.
+
+Implementation:
+
+- [x] Add failing unit tests proving My live includes only participant-pending
+  bets, returns a truthful count, and preserves input order.
+- [x] Add a failing rendered-output regression for the semantic metric button,
+  accessible count label, My live filter, controlled navigation state, empty
+  result behavior, and responsive interaction styling.
+- [ ] Extend the typed bet-ledger helper and filter counts with `mine`.
+- [ ] Lift the matched-bet filter state into `BettingApp`; connect the score
+  metric, normal Matched bets tab, and controlled `BetsTab` filter callbacks.
+- [ ] Extend `Metric` with an optional semantic action path without changing
+  the noninteractive Open offers and net-balance metrics.
+- [ ] Add the My live filter control and reuse the Phase 19 results/empty-state
+  UI.
+- [ ] Add scoped actionable-metric hover, active, directional, focus, and
+  narrow-screen styles in `app/globals.css`.
+- [ ] Update `DESIGN.md` with score-strip drill-down and viewer-specific live
+  bet filter behavior.
+- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run db:generate`, and `npm run build`; confirm no
+  migration and no matched-bet, void, settlement, or authentication regression.
+- [ ] Inspect the shortcut from Board, Matched bets, Settle up, and Markets,
+  plus zero/nonzero My live states at desktop and mobile widths.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify the new shortcut and My live filter in the production bundle.
+
+Acceptance:
+
+- Clicking `My live bets` opens Matched bets with `My live` visibly selected.
+- The resulting cards are exactly the signed-in user's pending matched bets;
+  friends' bets, resolved bets, and voided bets are excluded.
+- The metric and filter show the same count before and after navigation.
+- Clicking the normal Matched bets navigation returns to Current rather than
+  leaving a hidden personal filter active.
+- A zero count still opens a clear My live empty view instead of doing nothing.
+- No bet terms, permissions, outcomes, debts, offline payments, public history,
+  or stored data change.
+
 ## Required verification
 
 ```text

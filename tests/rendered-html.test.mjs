@@ -226,6 +226,21 @@ test("matched bets hide voided history by default and expose status filters", as
   assert.match(clientStyles, /\.bet-ledger-empty/);
 });
 
+test("the score strip opens the signed-in user's live matched bets", async () => {
+  const [clientBundle, clientStyles] = await Promise.all([
+    readClientBundle(),
+    readClientStyles(),
+  ]);
+
+  assert.match(clientBundle, /My live bets/);
+  assert.match(clientBundle, /My live/);
+  assert.match(clientBundle, /View .* of your live bets/);
+  assert.match(clientBundle, /metric-action/);
+  assert.match(clientBundle, /NO .* BETS/);
+  assert.match(clientStyles, /\.metric-action/);
+  assert.match(clientStyles, /\.metric-action::after/);
+});
+
 test("mutual matched-bet voids preserve public history and require agreement", async () => {
   const [serverBundle, clientBundle, clientStyles, migrations] =
     await Promise.all([

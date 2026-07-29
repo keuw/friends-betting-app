@@ -9,15 +9,16 @@ import {
 
 type TestBet = {
   id: string;
+  isParticipant: boolean;
   status: BetStatus;
 };
 
 const bets: TestBet[] = [
-  { id: "pending-newest", status: "pending" },
-  { id: "maker-result", status: "maker_won" },
-  { id: "voided", status: "void" },
-  { id: "taker-result", status: "taker_won" },
-  { id: "pending-oldest", status: "pending" },
+  { id: "pending-newest", isParticipant: true, status: "pending" },
+  { id: "maker-result", isParticipant: true, status: "maker_won" },
+  { id: "voided", isParticipant: true, status: "void" },
+  { id: "taker-result", isParticipant: false, status: "taker_won" },
+  { id: "pending-oldest", isParticipant: false, status: "pending" },
 ];
 
 test("maps stored bet outcomes to user-facing matched-bet lifecycles", () => {
@@ -58,8 +59,16 @@ test("filters every matched-bet lifecycle without changing input order", () => {
   );
 });
 
-test("counts current, pending, resolved, voided, and all matched bets", () => {
+test("filters My live to participant-pending bets without changing input order", () => {
+  assert.deepEqual(
+    filterMatchedBets(bets, "mine").map(({ id }) => id),
+    ["pending-newest"],
+  );
+});
+
+test("counts My live, current, pending, resolved, voided, and all matched bets", () => {
   assert.deepEqual(countMatchedBets(bets), {
+    mine: 1,
     current: 4,
     pending: 2,
     resolved: 2,
