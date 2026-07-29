@@ -211,14 +211,16 @@ test("offers and matched bets explain exact context, sides, and winning rules", 
   assert.match(clientStyles, /\.personal-bet-summary/);
 });
 
-test("matched bets hide voided history by default and expose status filters", async () => {
+test("matched bets default to Pending and expose unambiguous status filters", async () => {
   const [clientBundle, clientStyles] = await Promise.all([
     readClientBundle(),
     readClientStyles(),
   ]);
 
   assert.match(clientBundle, /Filter matched bets by status/);
-  assert.match(clientBundle, /Pending \+ resolved · voided hidden/);
+  assert.match(clientBundle, /All unresolved matched bets/);
+  assert.doesNotMatch(clientBundle, /Pending \+ resolved · voided hidden/);
+  assert.doesNotMatch(clientBundle, /value:`current`,label:`Current`/);
   assert.match(clientBundle, /Nothing in this view/);
   assert.match(clientBundle, /Showing .* of .* matched bets/);
   assert.match(clientStyles, /\.bet-ledger-tools/);

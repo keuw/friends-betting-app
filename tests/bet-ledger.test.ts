@@ -30,15 +30,11 @@ test("maps stored bet outcomes to user-facing matched-bet lifecycles", () => {
   assert.equal(getBetLifecycle("void"), "void");
 });
 
-test("defaults the current matched-bet ledger to pending and resolved bets", () => {
+test("defaults the matched-bet ledger to pending bets", () => {
+  assert.equal(DEFAULT_BET_LEDGER_FILTER, "pending");
   assert.deepEqual(
-    filterMatchedBets(bets, "current").map(({ id }) => id),
-    [
-      "pending-newest",
-      "maker-result",
-      "taker-result",
-      "pending-oldest",
-    ],
+    filterMatchedBets(bets, DEFAULT_BET_LEDGER_FILTER).map(({ id }) => id),
+    ["pending-newest", "pending-oldest"],
   );
 });
 
@@ -68,10 +64,9 @@ test("filters My live to participant-pending bets without changing input order",
   );
 });
 
-test("counts My live, current, pending, resolved, voided, and all matched bets", () => {
+test("counts My live, pending, resolved, voided, and all matched bets", () => {
   assert.deepEqual(countMatchedBets(bets), {
     mine: 1,
-    current: 4,
     pending: 2,
     resolved: 2,
     void: 1,
@@ -85,5 +80,5 @@ test("keeps the zero-bet first-use card from hiding an explicit My live view", (
     true,
   );
   assert.equal(shouldShowFirstUseBetLedgerEmpty(0, "mine"), false);
-  assert.equal(shouldShowFirstUseBetLedgerEmpty(1, "current"), false);
+  assert.equal(shouldShowFirstUseBetLedgerEmpty(1, "pending"), false);
 });

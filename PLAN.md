@@ -2020,6 +2020,59 @@ Acceptance:
 - No bet terms, permissions, outcomes, debts, offline payments, public history,
   or stored data change.
 
+### Phase 21 — Make Pending the unambiguous matched-bet default
+
+Remove the combined `Current` filter now that it is easy to mistake for
+`Pending`. Each remaining control represents one clear scope, and normal
+Matched bets navigation opens the public pending ledger.
+
+Filter contract:
+
+- The filters are `My live`, `Pending`, `Resolved`, `Voided`, and `All`, in
+  that order.
+- `Pending` is the default and includes every unresolved matched bet across the
+  friend group.
+- `My live` remains the viewer-specific subset of Pending where
+  `isParticipant` is true.
+- `Resolved` contains maker-won and taker-won bets, `Voided` contains voided
+  history, and `All` contains the complete signed-in group ledger.
+- Remove `current` from `BetLedgerFilter`, helper counts, filter behavior, UI
+  controls, fallback labels, and explanatory copy.
+
+Navigation and state:
+
+- Selecting normal Matched bets navigation always resets the controlled filter
+  to `Pending`.
+- Selecting the score-strip shortcut still opens `My live`.
+- A zero-bet Pending ledger retains the friendly first-use card. A zero-result
+  explicit filter retains the filtered empty state and one-action All reset.
+- This is a read-only presentation change. Bet visibility, stored statuses,
+  permissions, matching, resolution, settlement, debt, and exports do not
+  change.
+
+Implementation:
+
+- [x] Add failing helper and production-bundle regressions for the Pending
+  default and absence of Current.
+- [ ] Remove Current semantics from the typed helper and counts.
+- [ ] Remove the Current control and make filter descriptions specific to the
+  selected scope.
+- [ ] Update `DESIGN.md` to make Pending the normal ledger destination.
+- [ ] Run the full unit, built integration, lint, type, schema, and build gates;
+  confirm no migration.
+- [ ] Commit and push the verified source, deploy a saved Sites version, and
+  verify the production bundle exposes the simplified filters.
+
+Acceptance:
+
+- Normal Matched bets navigation opens Pending, never a hidden combination.
+- My live and Pending remain visibly distinct: personal active bets versus all
+  active bets.
+- Current is absent from the filter bar and from the typed filter contract.
+- Resolved and Voided history remain available explicitly; All remains the
+  complete ledger.
+- No stored data or server behavior changes.
+
 ## Required verification
 
 ```text
