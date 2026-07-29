@@ -168,6 +168,12 @@ test(
         `Closed reopen ${stamp}`,
         closeSoon,
       );
+      const concurrentClosedMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Concurrent reopen ${stamp}`,
+        closeSoon,
+      );
       const expiringOffer = await createOffer(baseUrl, maker, [
         leg(closedMarket),
       ]);
@@ -243,6 +249,35 @@ test(
       assert.equal(staleReopen.status, 409);
       assert.equal(staleReopen.payload.error?.code, "MARKET_CHANGED");
 
+      const concurrentReopens = await Promise.all([
+        postAction(baseUrl, maker, {
+          type: "reopen_market",
+          marketId: concurrentClosedMarket.id,
+          baseRevisionId: concurrentClosedMarket.currentRevisionId,
+          closesAt: new Date(Date.now() + 14_400_000).toISOString(),
+          changeNote: "First concurrent reopen attempt",
+        }),
+        postAction(baseUrl, maker, {
+          type: "reopen_market",
+          marketId: concurrentClosedMarket.id,
+          baseRevisionId: concurrentClosedMarket.currentRevisionId,
+          closesAt: new Date(Date.now() + 18_000_000).toISOString(),
+          changeNote: "Second concurrent reopen attempt",
+        }),
+      ]);
+      assert.deepEqual(
+        concurrentReopens.map((result) => result.status).sort(),
+        [200, 409],
+      );
+      assert.equal(
+        concurrentReopens.filter(
+          (result) =>
+            result.status === 409 &&
+            result.payload.error?.code === "MARKET_CHANGED",
+        ).length,
+        1,
+      );
+
       const resolvedMarket = await createMarket(
         baseUrl,
         maker,
@@ -265,6 +300,29 @@ test(
       });
       assert.equal(reopenResolved.status, 409);
       assert.equal(reopenResolved.payload.error?.code, "MARKET_FINAL");
+
+      const voidedMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Voided final ${stamp}`,
+        "2038-06-01T00:00:00.000Z",
+      );
+      const voided = await postAction(baseUrl, maker, {
+        type: "resolve_market",
+        marketId: voidedMarket.id,
+        marketRevisionId: voidedMarket.currentRevisionId,
+        result: "void",
+      });
+      assert.equal(voided.status, 200);
+      const reopenVoided = await postAction(baseUrl, maker, {
+        type: "reopen_market",
+        marketId: voidedMarket.id,
+        baseRevisionId: voidedMarket.currentRevisionId,
+        closesAt: "2039-06-01T00:00:00.000Z",
+        changeNote: "A voided market must remain final",
+      });
+      assert.equal(reopenVoided.status, 409);
+      assert.equal(reopenVoided.payload.error?.code, "MARKET_FINAL");
 
       const raceMarket = await createMarket(
         baseUrl,
