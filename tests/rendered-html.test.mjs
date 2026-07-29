@@ -185,9 +185,30 @@ test("parlay offers can explicitly Back or Fade with complementary role copy", a
   assert.match(clientBundle, /Back this parlay/);
   assert.match(clientBundle, /Fade this parlay/);
   assert.match(clientBundle, /FADING PARLAY/);
-  assert.match(clientBundle, /wins if any pick misses/);
-  assert.match(clientBundle, /backs it/);
-  assert.match(clientBundle, /fades it/);
+  assert.match(clientBundle, /win if any listed pick misses/);
+  assert.match(clientBundle, /win only if every non-void listed pick hits/);
+  assert.match(clientBundle, /Back or fade the listed picks/);
+});
+
+test("offers and matched bets explain exact context, sides, and winning rules", async () => {
+  const [serverBundle, clientBundle, clientStyles] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readClientStyles(),
+  ]);
+
+  assert.match(serverBundle, /market_description/);
+  assert.match(clientBundle, /OFFER SIDES/);
+  assert.match(clientBundle, /You if accepted/);
+  assert.match(clientBundle, /Accept ·/);
+  assert.match(clientBundle, /YOUR BET/);
+  assert.match(clientBundle, /Your pick/);
+  assert.match(clientBundle, /You win if/);
+  assert.match(clientBundle, /Listed pick/);
+  assert.doesNotMatch(clientBundle, /YOUR SIDE:/);
+  assert.match(clientStyles, /\.market-context/);
+  assert.match(clientStyles, /\.offer-side-summary/);
+  assert.match(clientStyles, /\.personal-bet-summary/);
 });
 
 test("mutual matched-bet voids preserve public history and require agreement", async () => {
