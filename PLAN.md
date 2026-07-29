@@ -2060,7 +2060,7 @@ Implementation:
 - [x] Update `DESIGN.md` to make Pending the normal ledger destination.
 - [x] Run the full unit, built integration, lint, type, schema, and build gates;
   confirm no migration.
-- [ ] Commit and push the verified source, deploy a saved Sites version, and
+- [x] Commit and push the verified source, deploy a saved Sites version, and
   verify the production bundle exposes the simplified filters.
 
 Acceptance:
