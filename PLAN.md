@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 11 complete and verified; Phase 10 remains planned and unapproved
+**Status:** Phases 10 and 11 complete and verified.
 
 ## Product contract
 
@@ -604,23 +604,23 @@ Interaction contract:
 
 Implementation:
 
-- [ ] Add failing action-parser and production regressions for the decline
+- [x] Add failing action-parser and production regressions for the decline
   action, recipient-only control, and user-facing copy.
-- [ ] Add `decline_counteroffer` to the action contract, parser, and server
+- [x] Add `decline_counteroffer` to the action contract, parser, and server
   dispatcher.
-- [ ] Implement an idempotent recipient-authorized decline transition with a
+- [x] Implement an idempotent recipient-authorized decline transition with a
   dedicated public audit event.
-- [ ] Add database guards so accepting or countering a counteroffer rechecks
+- [x] Add database guards so accepting or countering a counteroffer rechecks
   that exact counter is still pending inside the same atomic batch.
-- [ ] Add a clearly secondary `Decline` button beside `Accept` and `Counter`,
+- [x] Add a clearly secondary `Decline` button beside `Accept` and `Counter`,
   with disabled, success, and stale-state handling.
-- [ ] Update the README and contributor invariants for the terminal decline
+- [x] Update the README and contributor invariants for the terminal decline
   behavior.
-- [ ] Run unit tests, rendered-output tests, lint, strict type checking, and the
+- [x] Run unit tests, rendered-output tests, lint, strict type checking, and the
   production build.
-- [ ] Exercise separate proposer and recipient identities locally, including a
+- [x] Exercise separate proposer and recipient identities locally, including a
   concurrent accept-versus-decline check.
-- [ ] Commit and push the verified source, publish a new Sites version, and
+- [x] Commit and push the verified source, publish a new Sites version, and
   verify the production URL.
 
 Acceptance:
