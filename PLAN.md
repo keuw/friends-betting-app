@@ -1,8 +1,8 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 12 complete and deployed; Phase 13 planned and awaiting
-approval.
+**Status:** Phase 12 complete and deployed; Phases 13 and 14 planned and
+awaiting approval.
 
 ## Product contract
 
@@ -38,6 +38,11 @@ debt-settlement action is visible to signed-in members.
 - Accepting any root or counteroffer atomically consumes the root offer and
   supersedes all other branches.
 - The event creator acts as oracle and may resolve or void that event.
+- Only the market creator may permanently delete a market, and only when no
+  offer or matched-bet history references any revision of it.
+- Permanent deletion removes the unused market and all of its revisions from
+  the board. It never cascades into offers, bets, debts, or their immutable
+  history.
 - Market ownership does not restrict betting participation: the creator may
   make, counter, or accept offers containing their own market.
 - Creator participation and creator resolution remain visible in the public
@@ -240,12 +245,24 @@ Mutual voiding follows the same single-winner transition model:
    void creates no debt; a settlement that wins the race creates exactly one
    debt; the losing response returns a structured `409`.
 
+Permanent market deletion also uses the database as the sole arbiter:
+
+1. Eligibility requires the requesting user to own the market and zero
+   `offer_legs` or `bet_revision_legs` references across every market revision.
+2. Deletion removes the market revisions and market in one atomic D1 batch.
+3. Offer creation racing with deletion has one winner: either the offer and its
+   frozen leg persist, or the market disappears. The losing action returns a
+   structured conflict and leaves no partial offer or orphaned revision.
+4. Historical references block deletion regardless of whether their offer or
+   bet is currently open, cancelled, expired, settled, or void.
+
 ## Server surface
 
 - `GET /api/state` — signed-in application snapshot.
 - `POST /api/actions` with a validated discriminated action:
   - `create_market`
   - `edit_market`
+  - `delete_market`
   - `resolve_market`
   - `create_offer`
   - `create_counteroffer`
@@ -1150,6 +1167,171 @@ Acceptance:
 - Existing authentication, offers, counteroffers, market editing, Back/Fade
   parlays, bet revisions, settlement, export, and public activity behavior
   continues to pass.
+
+### Phase 14 — Permanently delete an unused market
+
+Let market creators remove accidental, duplicate, or abandoned markets from
+the board without weakening Sidebet's accepted-offer and matched-bet audit
+history. “Delete” means the unused market and every one of its revisions leave
+the database and application state; it does not mean erasing historical bets
+or recursively deleting other users' records.
+
+Eligibility contract:
+
+- Only the market creator may delete the market. Other signed-in users receive
+  `403 NOT_MARKET_CREATOR`, even if the market is otherwise unused.
+- An open, resolved, or void market is eligible when no `offer_legs` row and no
+  `bet_revision_legs` row references the market or any of its revisions.
+- Reference checks include every offer and bet status. Cancelled or expired
+  offers and won, lost, or void bets still represent public history and block
+  deletion.
+- This conservative definition is intentionally stronger than “no active
+  bets.” If the market was ever used in an offer or matched-bet revision, it is
+  historical rather than unused and cannot be hard-deleted.
+- Editing a market does not make it ineligible by itself. An unused market may
+  be deleted together with all of its immutable revisions.
+- Deletion never removes or rewrites an offer, counteroffer, bet, bet revision,
+  debt, offline settlement, or Notion matched-bet record.
+- The action is irreversible. There is no automatic restore or undelete flow
+  in this phase.
+
+Interface contract:
+
+- A creator-owned market card exposes `Delete unused market` only when the
+  server reports that it has zero offer and bet references.
+- Creator-owned ineligible cards explain the blocker using server-derived
+  counts, for example `Cannot delete: used by 2 offers and 1 matched bet`.
+- Selecting delete opens an inline destructive confirmation panel naming the
+  market and explaining that every revision will be permanently removed.
+- The final `Delete permanently` control is visually distinct from edit, void,
+  and resolve actions. `Cancel` closes the panel without changing data.
+- All destructive controls expose disabled and busy states. The client does not
+  remove a card optimistically; it waits for the refreshed server snapshot.
+- A successful deletion removes the card and updates All/Open/Resolved/Voided
+  counts immediately. If a friend creates an offer first, the stale confirmation
+  reports that the market is now in use and refreshes the protected card.
+- The controls are keyboard accessible and remain usable on narrow screens.
+- Deletion records a minimal `deleted_market` activity receipt with the actor,
+  former market ID, question, revision count, and timestamp so the action is
+  accountable without keeping the market on the board.
+
+Server and race contract:
+
+- Add a `delete_market` action accepting only a validated `marketId`; ownership
+  and eligibility are always recomputed by the server.
+- The application snapshot adds `offerReferenceCount`,
+  `betReferenceCount`, `canDelete`, and a server-derived deletion blocker to
+  each market view. These fields are advisory for UI only and never authorize
+  deletion.
+- The delete handler loads the market for clear `404`, ownership, and conflict
+  errors, then performs conditional deletes that repeat the same ownership and
+  zero-reference predicates inside the atomic D1 batch.
+- The `deleted_market` receipt is inserted with the same eligibility predicate
+  inside that batch, so a failed or stale deletion cannot leave a false audit
+  event.
+- Delete `market_revisions` before `markets` to satisfy existing foreign keys.
+  Do not add `ON DELETE CASCADE` and do not disable foreign-key enforcement.
+- A concurrent offer or bet-revision insert that commits first causes deletion
+  to return `409 MARKET_IN_USE`. A deletion that commits first makes the stale
+  leg insertion fail atomically with a structured market-changed response and
+  no root offer, leg, or audit fragment.
+- Concurrent repeated deletes are idempotent only for the request that removed
+  the market. Later requests receive `404 MARKET_NOT_FOUND`; they never report
+  success for an unknown target.
+- Concurrent edit or resolution requests either complete before deletion and
+  are removed with the still-unused market, or lose to deletion and return a
+  structured stale/not-found response.
+- Existing foreign-key constraints are the final integrity backstop. Any
+  unexpected reference aborts the full deletion batch.
+
+Persistence and compatibility contract:
+
+- This phase adds no new database table or column. Eligibility derives from the
+  existing indexed `offer_legs.market_id` and
+  `bet_revision_legs.market_id` relationships.
+- Add an index on `bet_revision_legs.market_id` only if query-plan inspection
+  shows the existing revision index cannot serve the eligibility query; any
+  generated migration must remain additive and non-destructive.
+- Runtime schema initialization must mirror any added index with
+  `CREATE INDEX IF NOT EXISTS`.
+- Historical Notion exports require no deletion or schema change because an
+  eligible market cannot appear in a matched bet. Weekly export behavior must
+  remain unchanged.
+- Documentation distinguishes permanent deletion of a never-used market from
+  voiding a market result and mutually voiding a matched bet.
+
+Threat model:
+
+- Treat client `canDelete` values, displayed counts, market status, and
+  ownership as untrusted. The server derives all authorization and reference
+  checks directly from D1 at mutation time.
+- Never accept cascade, force, actor, or reference-count fields from the
+  request payload.
+- Protect against time-of-check/time-of-use races by repeating the eligibility
+  predicate in the delete statements rather than relying on the earlier state
+  snapshot.
+- Do not expose identity emails, SQL errors, or raw foreign-key details in
+  conflict responses or the deletion activity receipt.
+- A malformed, unauthorized, stale, or in-use deletion request changes no
+  market, revision, offer, bet, debt, export, or audit history.
+
+Implementation:
+
+- [ ] Add failing parser tests proving `delete_market` requires one bounded
+  `marketId`, returns only typed action fields, and cannot be authorized by
+  client-supplied ownership, force, or reference-count overrides.
+- [ ] Add failing production D1 tests for creator-only deletion across open,
+  resolved, void, and multi-revision unused markets, including full removal
+  from every viewer's state.
+- [ ] Add production blockers for open, cancelled, expired, and accepted
+  offers plus pending, won, lost, and void matched bets, proving every
+  historical reference preserves the market.
+- [ ] Add offer-creation-versus-deletion, edit-versus-deletion,
+  resolution-versus-deletion, and repeated-deletion race regressions proving
+  one coherent result and no partial offer or orphaned revision.
+- [ ] Add the `DeleteMarketAction` contract and market deletion capability
+  fields in `lib/contracts.ts`, then parse the action in
+  `lib/action-parser.ts`.
+- [ ] Extend `lib/server.ts` market-state queries with distinct offer and bet
+  reference counts plus server-derived `canDelete` and blocker text.
+- [ ] Implement conditional creator-only revision and market deletion,
+  structured `MARKET_IN_USE` handling, race-safe stale-offer handling, and the
+  minimal `deleted_market` audit receipt.
+- [ ] Inspect D1 query plans for both reference checks; add only the missing
+  additive index to `db/schema.ts`, `db/index.ts`, and a generated migration if
+  the current indexes are insufficient.
+- [ ] Add the eligibility explanation and two-step destructive confirmation to
+  `app/BettingApp.tsx`, with responsive styles in `app/globals.css`.
+- [ ] Update rendered-output regressions, `README.md`, `CONTRIBUTING.md`, and
+  market documentation with the exact deletion boundary and conflict errors.
+- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect any
+  generated migration and the packaged Worker for destructive SQL, disabled
+  foreign keys, or secrets.
+- [ ] Exercise creator, non-creator, and observer identities against eligible
+  and protected markets in the production-style D1 runtime.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify successful deletion plus every protected-state conflict on the
+  live app without changing the Notion archive.
+
+Acceptance:
+
+- A market creator can permanently delete their unused market regardless of
+  whether it is open, resolved, void, or has multiple unreferenced revisions.
+- The deleted market and all of its revisions disappear from D1-backed
+  application state for every user, and the All markets counts shrink.
+- Nobody else can delete it, and client-supplied state cannot bypass the
+  server's ownership or reference checks.
+- Any offer or matched-bet reference of any status protects the market and its
+  frozen revision history from deletion.
+- Offer creation and deletion races produce either one complete offer with its
+  market or one complete deletion with no offer; partial records are
+  impossible.
+- The UI clearly distinguishes deleting an unused market, voiding a market
+  result, and mutually voiding a pending matched bet.
+- Existing authentication, offers, counteroffers, market editing and
+  resolution, Back/Fade parlays, mutual bet revisions, debt settlement, Notion
+  export, and public activity behavior continues to pass.
 
 ## Required verification
 
