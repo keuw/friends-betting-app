@@ -1797,8 +1797,8 @@ Implementation:
 - [/] Inspect straight and parlay offers plus maker, taker, and observer matched
   views at desktop and mobile widths. The in-app browser was unavailable;
   compiled responsive and accessibility regressions pass.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
-  and verify the new context and side copy on the live app.
+- [x] Commit and push the exact verified source, deploy Sites version 17, and
+  verify the live production bundle contains the new context and side copy.
 
 Acceptance:
 
