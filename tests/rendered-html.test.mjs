@@ -206,7 +206,7 @@ test("market creators receive a guarded permanent-delete flow for unused markets
   assert.match(serverBundle, /deleted_market/);
   assert.match(serverBundle, /NOT_MARKET_CREATOR/);
   assert.match(serverBundle, /MARKET_IN_USE/);
-  assert.match(clientBundle, /Delete market/);
+  assert.match(clientBundle, /Delete unused market/);
   assert.match(clientBundle, /PERMANENT DELETE/);
   assert.match(clientBundle, /Permanently delete/);
   assert.match(clientBundle, /A minimal deletion receipt remains/);

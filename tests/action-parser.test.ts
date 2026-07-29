@@ -240,6 +240,18 @@ test("parses the mutual matched-bet void lifecycle", () => {
   );
   assert.deepEqual(
     parseAppAction({
+      type: "respond_bet_void",
+      betVoidRequestId: "void-request-1",
+      decision: "rejected",
+    }),
+    {
+      type: "respond_bet_void",
+      betVoidRequestId: "void-request-1",
+      decision: "rejected",
+    },
+  );
+  assert.deepEqual(
+    parseAppAction({
       type: "cancel_bet_void",
       betVoidRequestId: "void-request-1",
     }),
@@ -255,6 +267,17 @@ test("parses the mutual matched-bet void lifecycle", () => {
         type: "request_bet_void",
         betId: "bet-1",
         reason: "No",
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === "INVALID_VOID_REASON",
+  );
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "request_bet_void",
+        betId: "bet-1",
+        reason: "x".repeat(201),
       }),
     (error: unknown) =>
       error instanceof AppError &&

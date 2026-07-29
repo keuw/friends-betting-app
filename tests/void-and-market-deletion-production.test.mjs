@@ -272,6 +272,15 @@ test(
         betById(cancellation.payload, bet.id).voidRequests.at(-1)?.status,
         "cancelled",
       );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "cancel_bet_void",
+            betVoidRequestId: voidRequest.id,
+          })
+        ).status,
+        200,
+      );
 
       const acceptedRequestResponse = await postAction(baseUrl, taker, {
         type: "request_bet_void",

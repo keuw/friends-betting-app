@@ -2320,7 +2320,7 @@ function MarketCard({
               aria-expanded={deleteArmed}
               onClick={() => setDeleteArmed((current) => !current)}
             >
-              {deleteArmed ? "Close delete panel" : "Delete market"}
+              {deleteArmed ? "Close delete panel" : "Delete unused market"}
             </button>
           )}
         </div>
@@ -2336,7 +2336,7 @@ function MarketCard({
         <section className="market-delete-panel" aria-label="Delete market">
           <div>
             <span>PERMANENT DELETE</span>
-            <strong>Remove this unused market?</strong>
+            <strong>Remove “{market.question}”?</strong>
           </div>
           <p>
             This removes all {market.revisions.length} market revision
