@@ -1611,6 +1611,88 @@ Acceptance:
   market revisions, parlays, mutual bet edits and voids, debt settlement,
   Notion export, and public activity behavior continues to pass.
 
+### Phase 17 — Polish the mutual-void request UI
+
+Make the matched-bet mutual-void workflow feel like one deliberate, trustworthy
+agreement surface. Fix the misaligned reason field and give both the request
+composer and pending-request panel a clearer visual hierarchy without changing
+who may request, respond to, or cancel a void.
+
+Visual and content contract:
+
+- Present the request composer as a compact inset agreement card with a clear
+  `REQUEST MUTUAL VOID` eyebrow, an action-oriented title naming the other
+  participant, and one concise explanation that the bet remains active until
+  both sides agree.
+- Give the reason its own full-width field group. The visible label, public
+  history helper, textarea, and live `0 / 200` character count align to the
+  same card width; the textarea never inherits inline label sizing or overflows
+  its parent.
+- Use the existing paper, coral-danger, ink, line, radius, and focus tokens.
+  The form receives one border-based elevation signal and no decorative shadow.
+- Separate explanatory content from the form field with spacing rather than
+  extra boxes. Keep the finality/no-debt message visible but secondary.
+- Use outcome-specific action labels: `Send void request` is primary and
+  `Cancel` is secondary. Do not style cancellation as agreement to keep the
+  bet.
+- Restyle the public pending-request panel as the read-only counterpart to the
+  composer: requester/recipient and status in the header, the reason in a
+  legible quote block, the captured revision and active-until-agreed rule in a
+  compact notice, then the existing response controls.
+
+Interaction, responsive, and accessibility contract:
+
+- Preserve the existing 3–200 character validation, server action payloads,
+  permissions, busy handling, success messages, and audited history exactly.
+- Connect the textarea to an explicit label and helper with stable IDs and
+  `aria-describedby`; expose the character count without creating noisy live
+  announcements on every keystroke.
+- The sender sees the other participant's name in the title. All signed-in
+  friends continue to see the public pending request, while only the recipient
+  or requester receives their existing allowed controls.
+- At narrow widths, the header stacks cleanly, the reason remains full width,
+  and every action becomes a 44px-high full-width control in logical keyboard
+  order. Long names and reasons wrap without widening the matched-bet card.
+- Focus-visible, hover, disabled, and busy states continue using the existing
+  application behavior and remain readable on the danger-tinted surface.
+
+Implementation:
+
+- [x] Add rendered-output regressions for the explicit reason label/helper,
+  character count, participant-specific title, pending reason block, and
+  active-until-agreed notice.
+- [x] Refactor only the mutual-void composer and pending proposal markup in
+  `app/BettingApp.tsx`, keeping request/response actions and state transitions
+  unchanged.
+- [x] Add scoped mutual-void field, header, reason, notice, and footer styles in
+  `app/globals.css`; do not alter shared form controls in ways that affect
+  market, offer, revision, or settlement forms.
+- [x] Add the mobile stacking rules to the existing `680px` breakpoint and
+  confirm the textarea and buttons fit the narrowest supported card.
+- [x] Confirm `DESIGN.md` already covers the mutual-agreement pattern; no new
+  design-system rule is required.
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, and `npm run build`.
+- [/] Inspect the form and pending-request states at desktop and mobile widths,
+  including empty, minimum-valid, maximum-length, disabled/busy, requester,
+  recipient, and observer views. The in-app browser was unavailable during
+  local verification; compiled responsive and accessibility regressions pass.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify the polished form on the live app.
+
+Acceptance:
+
+- The reason label, helper, textarea, and character count form one aligned,
+  full-width field group with no clipping or awkward inline sizing.
+- The mutual-void composer is visually distinct from the surrounding matched
+  bet, explains the two-party agreement rule, and keeps its primary and
+  secondary actions easy to scan.
+- The pending-request panel uses the same hierarchy and makes the participants,
+  reason, status, base revision, and current-bet guardrail easy to understand.
+- The workflow is keyboard accessible and remains clean on mobile.
+- No database, API, authorization, settlement, debt, audit, or Notion export
+  behavior changes.
+
 ## Required verification
 
 ```text

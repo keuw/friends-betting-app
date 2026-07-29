@@ -1098,6 +1098,15 @@ function BetCard({
   const activeRevision = bet.revisions.find(
     (revision) => revision.id === bet.currentRevisionId,
   );
+  const otherParticipantName =
+    bet.mySide === "maker"
+      ? bet.takerName
+      : bet.mySide === "taker"
+        ? bet.makerName
+        : "the other participant";
+  const voidReasonInputId = `void-reason-${bet.id}`;
+  const voidReasonHelpId = `${voidReasonInputId}-help`;
+  const voidReasonCountId = `${voidReasonInputId}-count`;
 
   return (
     <article className={`bet-card ${bet.isParticipant ? "mine" : ""}`}>
@@ -1251,26 +1260,36 @@ function BetCard({
           className="void-request-proposal"
           aria-label="Pending mutual void request"
         >
-          <div className="revision-proposal-head">
-            <div>
-              <span>MUTUAL VOID REQUEST</span>
-              <strong>
-                {pendingVoidRequest.requesterName} asks{" "}
-                {pendingVoidRequest.recipientName}
-              </strong>
+          <div className="void-request-proposal-head">
+            <div className="void-request-heading">
+              <span className="void-request-eyebrow">
+                MUTUAL VOID REQUEST
+              </span>
+              <strong>Void request from {pendingVoidRequest.requesterName}</strong>
+              <small>
+                {pendingVoidRequest.requesterName} is asking{" "}
+                {pendingVoidRequest.recipientName} to end this match.
+              </small>
             </div>
             <StatusBadge status={pendingVoidRequest.status} />
           </div>
-          <p className="void-request-reason">
-            “{pendingVoidRequest.reason}”
-          </p>
-          <p className="void-request-guardrail">
-            Based on bet v{pendingVoidRequest.baseRevisionNumber}. The bet stays
-            active until the other participant accepts.
-          </p>
+          <blockquote className="void-request-reason-block">
+            <span>Reason</span>
+            <p>“{pendingVoidRequest.reason}”</p>
+          </blockquote>
+          <div className="void-request-guardrail">
+            <strong>
+              Bet v{pendingVoidRequest.baseRevisionNumber} remains active
+            </strong>
+            <span>
+              Nothing changes because of this request unless{" "}
+              {pendingVoidRequest.recipientName} agrees before settlement.
+              Mutual agreement is final and creates no debt.
+            </span>
+          </div>
           {(pendingVoidRequest.canRespond ||
             pendingVoidRequest.canCancel) && (
-            <div className="revision-response-actions">
+            <div className="revision-response-actions void-request-actions">
               {pendingVoidRequest.canRespond && (
                 <>
                   <button
@@ -1360,29 +1379,45 @@ function BetCard({
             });
           }}
         >
-          <div className="revision-editor-head">
-            <div>
-              <span>REQUEST MUTUAL VOID</span>
-              <h4>Ask the other side to cancel this match</h4>
+          <div className="void-request-form-head">
+            <div className="void-request-heading">
+              <span className="void-request-eyebrow">
+                REQUEST MUTUAL VOID
+              </span>
+              <h4>Ask {otherParticipantName} to void this bet</h4>
             </div>
-            <span>No debt unless settled normally</span>
+            <span className="void-request-outcome">
+              Agreement creates no debt
+            </span>
           </div>
-          <p>
-            Explain why. Your request and their response remain in the public
-            bet history.
+          <p className="void-request-intro">
+            This bet stays active until {otherParticipantName} agrees or it
+            settles normally. Your request and their response remain public.
           </p>
-          <label>
-            <span>Reason</span>
+          <div className="void-request-field">
+            <div className="void-request-field-head">
+              <label htmlFor={voidReasonInputId}>
+                Reason for requesting a void
+              </label>
+              <span id={voidReasonCountId}>
+                {voidReason.length} / 200 characters used
+              </span>
+            </div>
             <textarea
+              id={voidReasonInputId}
               value={voidReason}
               onChange={(event) => setVoidReason(event.target.value)}
+              aria-describedby={`${voidReasonHelpId} ${voidReasonCountId}`}
               placeholder="We entered the wrong terms…"
               minLength={3}
               maxLength={200}
               required
             />
-          </label>
-          <div className="revision-editor-actions">
+            <p id={voidReasonHelpId} className="void-request-field-help">
+              Visible to everyone in bet history.
+            </p>
+          </div>
+          <div className="revision-editor-actions void-request-actions">
             <button
               type="submit"
               className="button-accept"
@@ -1395,7 +1430,7 @@ function BetCard({
               className="button-quiet"
               onClick={() => setRequestingVoid(false)}
             >
-              Keep bet
+              Cancel
             </button>
           </div>
         </form>

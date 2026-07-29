@@ -1781,9 +1781,59 @@ button.brand-lockup {
 }
 
 .void-request-proposal {
-  padding: 0.9rem;
+  padding: 1rem;
   border-color: rgba(166, 45, 37, 0.45);
   background: var(--surface-danger);
+}
+
+.void-request-proposal-head,
+.void-request-form-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.void-request-heading {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.void-request-eyebrow {
+  color: var(--danger);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.void-request-heading strong,
+.void-request-heading h4 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.3;
+}
+
+.void-request-heading small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.void-request-outcome {
+  flex: 0 0 auto;
+  color: var(--danger);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: right;
+  text-transform: uppercase;
 }
 
 .void-agreement-summary {
@@ -1804,44 +1854,132 @@ button.brand-lockup {
   line-height: 1.45;
 }
 
-.void-request-reason {
-  margin: 0.75rem 0 0.5rem;
-  font-size: 0.7rem;
+.void-request-reason-block {
+  display: grid;
+  gap: 0.3rem;
+  overflow-wrap: anywhere;
+  margin: 0.8rem 0 0;
+  padding: 0.72rem 0.8rem;
+  border-left: 3px solid var(--danger);
+  background: var(--paper);
+}
+
+.void-request-reason-block > span {
+  color: var(--danger);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.52rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.void-request-reason-block p {
+  margin: 0;
+  font-size: 0.72rem;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .void-request-guardrail {
-  margin: 0;
-  padding: 0.55rem 0.65rem;
-  border-left: 3px solid var(--danger);
+  display: grid;
+  gap: 0.18rem;
+  margin-top: 0.65rem;
+  padding: 0.62rem 0.7rem;
+  border: 1px solid rgba(166, 45, 37, 0.22);
+  border-radius: var(--radius-sm);
   background: rgba(255, 253, 247, 0.75);
+}
+
+.void-request-guardrail strong {
+  font-size: 0.64rem;
+}
+
+.void-request-guardrail span {
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: 0.61rem;
   line-height: 1.45;
 }
 
 .void-request-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-  padding: 0.9rem;
+  display: grid;
+  min-width: 0;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-color: rgba(166, 45, 37, 0.38);
+  background: var(--paper);
 }
 
-.void-request-form h4,
-.void-request-form p {
+.void-request-intro {
   margin: 0;
-}
-
-.void-request-form p,
-.void-request-form label > span {
+  padding-bottom: 0.8rem;
+  border-bottom: 1px dashed var(--line);
   color: var(--muted);
   font-size: 0.65rem;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.void-request-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.4rem;
+}
+
+.void-request-field-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.void-request-field-head label {
+  color: var(--ink);
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.void-request-field-head span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.53rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .void-request-form textarea {
-  min-height: 5rem;
+  width: 100%;
+  min-height: 6rem;
+  padding: 0.72rem 0.78rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  resize: vertical;
+  transition:
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+
+.void-request-form textarea:hover {
+  border-color: rgba(20, 32, 24, 0.42);
+}
+
+.void-request-form textarea::placeholder {
+  color: var(--muted);
+}
+
+.void-request-field-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+
+.void-request-actions {
+  margin-top: 0;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--line);
 }
 
 .void-request-history {
@@ -2984,6 +3122,23 @@ button.brand-lockup {
   .revision-editor-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .void-request-proposal-head,
+  .void-request-form-head,
+  .void-request-field-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .void-request-outcome {
+    text-align: left;
+  }
+
+  .void-request-actions,
+  .void-request-actions > button {
+    width: 100%;
   }
 
   .button-accept {
