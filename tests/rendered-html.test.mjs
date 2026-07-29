@@ -238,7 +238,7 @@ test("the score strip opens the signed-in user's live matched bets", async () =>
   assert.match(clientBundle, /metric-action/);
   assert.match(clientBundle, /NO .* BETS/);
   assert.match(clientStyles, /\.metric-action/);
-  assert.match(clientStyles, /\.metric-action::after/);
+  assert.match(clientStyles, /\.metric-action:{1,2}after/);
 });
 
 test("mutual matched-bet voids preserve public history and require agreement", async () => {

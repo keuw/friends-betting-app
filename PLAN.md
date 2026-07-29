@@ -1986,16 +1986,16 @@ Implementation:
 - [x] Add a failing rendered-output regression for the semantic metric button,
   accessible count label, My live filter, controlled navigation state, empty
   result behavior, and responsive interaction styling.
-- [ ] Extend the typed bet-ledger helper and filter counts with `mine`.
-- [ ] Lift the matched-bet filter state into `BettingApp`; connect the score
+- [x] Extend the typed bet-ledger helper and filter counts with `mine`.
+- [x] Lift the matched-bet filter state into `BettingApp`; connect the score
   metric, normal Matched bets tab, and controlled `BetsTab` filter callbacks.
-- [ ] Extend `Metric` with an optional semantic action path without changing
+- [x] Extend `Metric` with an optional semantic action path without changing
   the noninteractive Open offers and net-balance metrics.
-- [ ] Add the My live filter control and reuse the Phase 19 results/empty-state
+- [x] Add the My live filter control and reuse the Phase 19 results/empty-state
   UI.
-- [ ] Add scoped actionable-metric hover, active, directional, focus, and
+- [x] Add scoped actionable-metric hover, active, directional, focus, and
   narrow-screen styles in `app/globals.css`.
-- [ ] Update `DESIGN.md` with score-strip drill-down and viewer-specific live
+- [x] Update `DESIGN.md` with score-strip drill-down and viewer-specific live
   bet filter behavior.
 - [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run db:generate`, and `npm run build`; confirm no

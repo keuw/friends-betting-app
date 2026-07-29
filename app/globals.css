@@ -551,12 +551,42 @@ button.brand-lockup {
 .metric {
   display: flex;
   min-width: 7.5rem;
+  min-height: 2.75rem;
   flex-direction: column;
   justify-content: center;
   gap: 0.25rem;
   padding: 0.75rem 0.85rem;
   border-radius: var(--radius-sm);
   color: var(--ink);
+}
+
+.metric-action {
+  position: relative;
+  padding-right: 2rem;
+  border: 1px solid rgba(20, 32, 24, 0.48);
+  appearance: none;
+  text-align: left;
+}
+
+.metric-action::after {
+  position: absolute;
+  top: 0.58rem;
+  right: 0.65rem;
+  content: "↗";
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.metric-action:hover {
+  border-color: var(--ink);
+  background: #f2f4e7;
+  transform: translateY(-2px);
+}
+
+.metric-action:active {
+  transform: translateY(0);
 }
 
 .metric strong {
@@ -3234,6 +3264,16 @@ button.brand-lockup {
   .metric {
     min-width: 0;
     padding: 0.65rem;
+  }
+
+  .metric-action {
+    padding-right: 1.5rem;
+  }
+
+  .metric-action::after {
+    top: 0.5rem;
+    right: 0.45rem;
+    font-size: 0.62rem;
   }
 
   .metric strong {

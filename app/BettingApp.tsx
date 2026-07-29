@@ -60,6 +60,7 @@ const BET_STATUS_FILTERS: {
   value: BetLedgerFilter;
   label: string;
 }[] = [
+  { value: "mine", label: "My live" },
   { value: "current", label: "Current" },
   { value: "pending", label: "Pending" },
   { value: "resolved", label: "Resolved" },
@@ -76,6 +77,9 @@ export function BettingApp({
 }) {
   const [state, setState] = useState<AppState | null>(null);
   const [tab, setTab] = useState<Tab>("board");
+  const [betFilter, setBetFilter] = useState<BetLedgerFilter>(
+    DEFAULT_BET_LEDGER_FILTER,
+  );
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>("loading");
@@ -148,10 +152,8 @@ export function BettingApp({
 
   const openOffers =
     state?.offers.filter((offer) => offer.status === "open") ?? [];
-  const myPendingBets =
-    state?.bets.filter(
-      (bet) => bet.isParticipant && bet.status === "pending",
-    ).length ?? 0;
+  const betCounts = countMatchedBets(state?.bets ?? []);
+  const myPendingBets = betCounts.mine;
   const myNetCents =
     state?.pairBalances.reduce((total, balance) => {
       if (balance.iOwe) return total - balance.amountCents;
@@ -210,6 +212,11 @@ export function BettingApp({
             value={String(myPendingBets)}
             label="My live bets"
             tone="paper"
+            actionLabel={`View ${myPendingBets} of your live bets`}
+            onClick={() => {
+              setBetFilter("mine");
+              setTab("bets");
+            }}
           />
           <Metric
             value={money(Math.abs(myNetCents))}
@@ -233,7 +240,13 @@ export function BettingApp({
         >
           The board
         </TabButton>
-        <TabButton active={tab === "bets"} onClick={() => setTab("bets")}>
+        <TabButton
+          active={tab === "bets"}
+          onClick={() => {
+            setBetFilter(DEFAULT_BET_LEDGER_FILTER);
+            setTab("bets");
+          }}
+        >
           Matched bets
         </TabButton>
         <TabButton
@@ -294,7 +307,13 @@ export function BettingApp({
             />
           )}
           {tab === "bets" && (
-            <BetsTab state={state} busy={busy} onAction={runAction} />
+            <BetsTab
+              state={state}
+              busy={busy}
+              statusFilter={betFilter}
+              onStatusFilterChange={setBetFilter}
+              onAction={runAction}
+            />
           )}
           {tab === "settle" && (
             <SettleTab state={state} busy={busy} onAction={runAction} />
@@ -1092,15 +1111,16 @@ function CounterForm({
 function BetsTab({
   state,
   busy,
+  statusFilter,
+  onStatusFilterChange,
   onAction,
 }: {
   state: AppState;
   busy: string | null;
+  statusFilter: BetLedgerFilter;
+  onStatusFilterChange: (filter: BetLedgerFilter) => void;
   onAction: (action: AppAction, message: string) => Promise<void>;
 }) {
-  const [statusFilter, setStatusFilter] = useState<BetLedgerFilter>(
-    DEFAULT_BET_LEDGER_FILTER,
-  );
   const filteredBets = filterMatchedBets(state.bets, statusFilter);
   const statusCounts = countMatchedBets(state.bets);
   const selectedFilterLabel =
@@ -1127,7 +1147,11 @@ function BetsTab({
             <div className="bet-ledger-tools-head">
               <div>
                 <strong>Filter matched bets</strong>
-                <span>Pending + resolved · voided hidden</span>
+                <span>
+                  {statusFilter === "mine"
+                    ? "Your unresolved matched bets"
+                    : "Pending + resolved · voided hidden"}
+                </span>
               </div>
               <span aria-live="polite">
                 Showing {filteredBets.length} of {state.bets.length} matched bets
@@ -1146,7 +1170,7 @@ function BetsTab({
                   className={
                     statusFilter === filter.value ? "selected" : ""
                   }
-                  onClick={() => setStatusFilter(filter.value)}
+                  onClick={() => onStatusFilterChange(filter.value)}
                 >
                   <span>{filter.label}</span>
                   <b>{statusCounts[filter.value]}</b>
@@ -1163,7 +1187,10 @@ function BetsTab({
                 No matched bets are in the {selectedFilterLabel} category.
                 Choose another status to see the rest of the ledger.
               </p>
-              <button type="button" onClick={() => setStatusFilter("all")}>
+              <button
+                type="button"
+                onClick={() => onStatusFilterChange("all")}
+              >
                 Show all matched bets
               </button>
             </div>
@@ -2947,15 +2974,38 @@ function Metric({
   value,
   label,
   tone,
+  ...action
 }: {
   value: string;
   label: string;
   tone: "acid" | "paper" | "coral";
-}) {
-  return (
-    <div className={`metric metric-${tone}`}>
+} & (
+  | { actionLabel: string; onClick: () => void }
+  | { actionLabel?: never; onClick?: never }
+)) {
+  const content = (
+    <>
       <strong>{value}</strong>
       <span>{label}</span>
+    </>
+  );
+
+  if (action.onClick) {
+    return (
+      <button
+        type="button"
+        className={`metric metric-${tone} metric-action`}
+        aria-label={action.actionLabel}
+        onClick={action.onClick}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className={`metric metric-${tone}`}>
+      {content}
     </div>
   );
 }
