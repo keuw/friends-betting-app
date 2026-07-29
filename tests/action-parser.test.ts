@@ -189,3 +189,86 @@ test("parses Back and Fade positions while preserving legacy defaults", () => {
       error instanceof AppError && error.code === "INVALID_POSITION",
   );
 });
+
+test("parses unused-market deletion without accepting client-side eligibility", () => {
+  assert.deepEqual(
+    parseAppAction({
+      type: "delete_market",
+      marketId: "market-1",
+      canDelete: true,
+      force: true,
+    }),
+    {
+      type: "delete_market",
+      marketId: "market-1",
+    },
+  );
+
+  assert.throws(
+    () => parseAppAction({ type: "delete_market" }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === "INVALID_FIELD" &&
+      error.message === "marketId is required.",
+  );
+});
+
+test("parses the mutual matched-bet void lifecycle", () => {
+  assert.deepEqual(
+    parseAppAction({
+      type: "request_bet_void",
+      betId: "bet-1",
+      reason: "We both entered the wrong terms.",
+    }),
+    {
+      type: "request_bet_void",
+      betId: "bet-1",
+      reason: "We both entered the wrong terms.",
+    },
+  );
+  assert.deepEqual(
+    parseAppAction({
+      type: "respond_bet_void",
+      betVoidRequestId: "void-request-1",
+      decision: "accepted",
+    }),
+    {
+      type: "respond_bet_void",
+      betVoidRequestId: "void-request-1",
+      decision: "accepted",
+    },
+  );
+  assert.deepEqual(
+    parseAppAction({
+      type: "cancel_bet_void",
+      betVoidRequestId: "void-request-1",
+    }),
+    {
+      type: "cancel_bet_void",
+      betVoidRequestId: "void-request-1",
+    },
+  );
+
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "request_bet_void",
+        betId: "bet-1",
+        reason: "No",
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === "INVALID_VOID_REASON",
+  );
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "respond_bet_void",
+        betVoidRequestId: "void-request-1",
+        decision: "maybe",
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === "INVALID_DECISION",
+  );
+});
