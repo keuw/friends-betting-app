@@ -61,6 +61,14 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
 - Public ledgers pair free-text search with pressed-state status filters, keep
   filtered and total counts visible, and offer a one-action reset when no
   records match.
+- The matched-bet ledger opens on `Current`: pending and resolved bets remain
+  visible while mutually voided history is hidden until requested. Pending,
+  Resolved, Voided, and All remain explicit counted filters.
+- Maker-won and taker-won are both user-facing Resolved bets while each card
+  retains its exact winner badge. Offline pair-balance payments are not
+  presented as a per-bet Settled state.
+- Voided bets are filtered, never erased. Selecting Voided or All restores the
+  complete agreement, reason, revisions, and public history.
 - Numbered revision badges identify the exact terms used by each offer and bet.
   Revision timelines are append-only and show author, timestamp, change note,
   status, and the meaningful before/after fields.

@@ -28,6 +28,12 @@ import {
   parlayWinningRule,
   positionLabel,
 } from "@/lib/bet-perspective";
+import {
+  countMatchedBets,
+  DEFAULT_BET_LEDGER_FILTER,
+  filterMatchedBets,
+  type BetLedgerFilter,
+} from "@/lib/bet-ledger";
 import { americanOdds } from "@/lib/domain";
 import {
   filterAndSortMarkets,
@@ -49,6 +55,16 @@ const MARKET_STATUS_FILTERS: {
   { value: "closed", label: "Closed · awaiting result" },
   { value: "resolved", label: "Resolved" },
   { value: "void", label: "Voided" },
+];
+const BET_STATUS_FILTERS: {
+  value: BetLedgerFilter;
+  label: string;
+}[] = [
+  { value: "current", label: "Current" },
+  { value: "pending", label: "Pending" },
+  { value: "resolved", label: "Resolved" },
+  { value: "void", label: "Voided" },
+  { value: "all", label: "All" },
 ];
 
 export function BettingApp({
@@ -1082,13 +1098,22 @@ function BetsTab({
   busy: string | null;
   onAction: (action: AppAction, message: string) => Promise<void>;
 }) {
+  const [statusFilter, setStatusFilter] = useState<BetLedgerFilter>(
+    DEFAULT_BET_LEDGER_FILTER,
+  );
+  const filteredBets = filterMatchedBets(state.bets, statusFilter);
+  const statusCounts = countMatchedBets(state.bets);
+  const selectedFilterLabel =
+    BET_STATUS_FILTERS.find((filter) => filter.value === statusFilter)?.label ??
+    "Current";
+
   return (
     <section className="single-column">
       <div className="section-heading large">
         <div>
           <h2>Every matched bet</h2>
         </div>
-        <span className="count-pill">{state.bets.length} total</span>
+        <span className="count-pill">{filteredBets.length} shown</span>
       </div>
       {state.bets.length === 0 ? (
         <EmptyCard
@@ -1097,17 +1122,65 @@ function BetsTab({
           body="Take an offer from the board or negotiate terms with a friend."
         />
       ) : (
-        <div className="bets-grid">
-          {state.bets.map((bet) => (
-            <BetCard
-              key={bet.id}
-              bet={bet}
-              markets={state.markets}
-              busy={busy}
-              onAction={onAction}
-            />
-          ))}
-        </div>
+        <>
+          <div className="bet-ledger-tools">
+            <div className="bet-ledger-tools-head">
+              <div>
+                <strong>Filter matched bets</strong>
+                <span>Pending + resolved · voided hidden</span>
+              </div>
+              <span aria-live="polite">
+                Showing {filteredBets.length} of {state.bets.length} matched bets
+              </span>
+            </div>
+            <div
+              className="bet-status-filters"
+              role="group"
+              aria-label="Filter matched bets by status"
+            >
+              {BET_STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  aria-pressed={statusFilter === filter.value}
+                  className={
+                    statusFilter === filter.value ? "selected" : ""
+                  }
+                  onClick={() => setStatusFilter(filter.value)}
+                >
+                  <span>{filter.label}</span>
+                  <b>{statusCounts[filter.value]}</b>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredBets.length === 0 ? (
+            <div className="bet-ledger-empty" role="status">
+              <span>NO {selectedFilterLabel.toLocaleUpperCase()} BETS</span>
+              <h3>Nothing in this view</h3>
+              <p>
+                No matched bets are in the {selectedFilterLabel} category.
+                Choose another status to see the rest of the ledger.
+              </p>
+              <button type="button" onClick={() => setStatusFilter("all")}>
+                Show all matched bets
+              </button>
+            </div>
+          ) : (
+            <div className="bets-grid">
+              {filteredBets.map((bet) => (
+                <BetCard
+                  key={bet.id}
+                  bet={bet}
+                  markets={state.markets}
+                  busy={busy}
+                  onAction={onAction}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </section>
   );

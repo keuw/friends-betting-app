@@ -1816,6 +1816,101 @@ Acceptance:
 - Authentication, acceptance concurrency, counteroffers, revisions, mutual
   voids, settlement, debts, Notion export, and market deletion continue to pass.
 
+### Phase 19 — Filter matched bets without default void clutter
+
+Keep mutually voided bets available as permanent public history while removing
+them from the initial Matched bets view. Add explicit status filters so friends
+can focus on bets awaiting results, completed results, or void history without
+changing bet settlement or deletion semantics.
+
+Filter semantics:
+
+- Add a typed matched-bet ledger filter with `current`, `pending`, `resolved`,
+  `void`, and `all` values.
+- `Current` is the default and includes every `pending`, `maker_won`, and
+  `taker_won` bet. It excludes only `void` bets, so existing resolved history
+  remains visible on first load.
+- `Pending` includes only bets whose stored status is `pending`.
+- `Resolved` combines `maker_won` and `taker_won`; the existing winner-specific
+  status badge remains on each card.
+- `Voided` includes only bets whose stored status is `void`.
+- `All` restores the complete matched-bet history, including voided bets.
+- There is no `Settled` matched-bet filter. Confirmed offline payments continue
+  to apply to pairwise net balances and are not presented as a per-bet state.
+- Filtering preserves the server's existing newest-accepted-first ordering and
+  operates over the already-authorized bet views. It does not delete, archive,
+  mutate, or weaken access to any bet or void-agreement history.
+
+Matched-bets UI contract:
+
+- Place one compact filter surface between the `Every matched bet` heading and
+  the bet grid, following the existing All markets filter styling.
+- Show buttons for `Current`, `Pending`, `Resolved`, `Voided`, and `All`, each
+  with its count. The Current control includes supporting copy that it means
+  `Pending + resolved · voided hidden`.
+- Use pressed-button semantics and a visible selected state; the filter must be
+  usable by keyboard and understandable without relying on color.
+- Change the heading count from an unconditional total to the number currently
+  shown, while also retaining the complete total in the filter summary.
+- When the complete ledger is empty, keep the existing `Nothing matched yet`
+  card. When a selected filter has no matches, show a filter-specific empty
+  state rather than implying that no bets have ever existed.
+- The filter wraps cleanly on narrow screens, retains at least a 44px target
+  height, and never pushes the bet grid beyond the viewport.
+- Filter selection is local to the mounted Matched bets tab. Refreshing or
+  revisiting the tab safely returns to the default Current view.
+
+Data and architecture boundary:
+
+- Create a small pure helper in `lib/bet-ledger.ts` for lifecycle
+  classification, counts, and filtering so the four stored `BetStatus` values
+  cannot drift from the three user-facing lifecycle labels.
+- Keep `BetStatus`, `BetView`, D1 queries, the 100-row authorization boundary,
+  API payloads, `settled_at`, debts, and offline settlements unchanged.
+- Do not rename `maker_won` or `taker_won` in storage; they remain the source of
+  both the Resolved filter and each card's exact winner badge.
+- Do not automatically delete voided bets. Their terms, mutual-void reason,
+  revision history, audit history, and Notion export eligibility remain intact.
+
+Implementation:
+
+- [x] Add failing unit tests for Current, Pending, Resolved, Voided, and All
+  filtering, including exact counts and stable input ordering.
+- [x] Add a failing rendered-output regression for the matched-bet filter,
+  default void exclusion, status labels, accessible pressed state, filtered
+  result count, and mobile styling.
+- [x] Add the typed lifecycle/count/filter helper in `lib/bet-ledger.ts`.
+- [x] Update `BetsTab` in `app/BettingApp.tsx` with local default filter state,
+  status counts, filtered cards, and distinct complete-ledger versus
+  no-filter-results empty states.
+- [x] Add scoped matched-bet filter styles in `app/globals.css`, reusing the
+  established paper, cream, ink, count-badge, wrap, and focus patterns.
+- [x] Update `DESIGN.md` with the Current-default and Resolved/Voided history
+  rules.
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run db:generate`, and `npm run build`; confirm no
+  migration is generated and mutual-void/debt-settlement regressions remain
+  green.
+- [/] Inspect Current, Pending, Resolved, Voided, All, and empty-result states
+  at desktop and mobile widths. The in-app browser was unavailable; compiled
+  responsive, accessible-control, and empty-state regressions pass.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify the new filter controls and default void exclusion on the live app.
+
+Acceptance:
+
+- Opening Matched bets shows pending and resolved bets but no voided bets.
+- A friend can switch among Pending, Resolved, Voided, All, and the default
+  Current view, with truthful counts and no page reload.
+- Resolved includes both maker-won and taker-won bets while retaining each
+  card's exact outcome.
+- Voided bets remain fully readable when explicitly selected, including their
+  mutual-agreement reason and immutable history.
+- Selecting an empty category produces a clear filtered-empty message; it does
+  not show the first-use `Nothing matched yet` message.
+- No bet, debt, payment confirmation, market, offer, audit record, or Notion
+  export behavior changes.
+
 ## Required verification
 
 ```text

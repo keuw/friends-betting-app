@@ -1614,6 +1614,130 @@ button.brand-lockup {
   padding: 2.25rem 0 5rem;
 }
 
+.bet-ledger-tools {
+  display: grid;
+  gap: 0.85rem;
+  margin: -0.75rem 0 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+}
+
+.bet-ledger-tools-head {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.bet-ledger-tools-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.bet-ledger-tools-head strong {
+  font-size: 0.78rem;
+}
+
+.bet-ledger-tools-head div span,
+.bet-ledger-tools-head > span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+
+.bet-ledger-tools-head > span {
+  text-align: right;
+}
+
+.bet-status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.bet-status-filters button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--cream);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.bet-status-filters button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.bet-status-filters button.selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.bet-status-filters button b {
+  display: grid;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 1rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.57rem;
+}
+
+.bet-ledger-empty {
+  display: grid;
+  min-height: 15rem;
+  place-items: center;
+  align-content: center;
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  text-align: center;
+}
+
+.bet-ledger-empty > span {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.bet-ledger-empty h3 {
+  margin: 0.55rem 0 0;
+  font-size: 1.25rem;
+}
+
+.bet-ledger-empty p {
+  max-width: 28rem;
+  margin: 0.45rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.bet-ledger-empty button {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.85rem;
+  border-color: var(--ink);
+  background: var(--acid);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
 .bets-grid {
   display: grid;
   gap: 1rem;
@@ -3277,6 +3401,21 @@ button.brand-lockup {
 
   .bet-leg-pick strong {
     text-align: left;
+  }
+
+  .bet-ledger-tools-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .bet-ledger-tools-head > span {
+    text-align: left;
+  }
+
+  .bet-status-filters button {
+    flex: 1 1 calc(50% - 0.45rem);
+    justify-content: space-between;
   }
 
   .offer-actions,
