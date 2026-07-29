@@ -32,6 +32,7 @@ import {
   countMatchedBets,
   DEFAULT_BET_LEDGER_FILTER,
   filterMatchedBets,
+  shouldShowFirstUseBetLedgerEmpty,
   type BetLedgerFilter,
 } from "@/lib/bet-ledger";
 import { americanOdds } from "@/lib/domain";
@@ -1123,6 +1124,10 @@ function BetsTab({
 }) {
   const filteredBets = filterMatchedBets(state.bets, statusFilter);
   const statusCounts = countMatchedBets(state.bets);
+  const showFirstUseEmpty = shouldShowFirstUseBetLedgerEmpty(
+    state.bets.length,
+    statusFilter,
+  );
   const selectedFilterLabel =
     BET_STATUS_FILTERS.find((filter) => filter.value === statusFilter)?.label ??
     "Current";
@@ -1135,7 +1140,7 @@ function BetsTab({
         </div>
         <span className="count-pill">{filteredBets.length} shown</span>
       </div>
-      {state.bets.length === 0 ? (
+      {showFirstUseEmpty ? (
         <EmptyCard
           label="NO BETS"
           title="Nothing matched yet"

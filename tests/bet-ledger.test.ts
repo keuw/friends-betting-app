@@ -3,8 +3,10 @@ import test from "node:test";
 import type { BetStatus } from "../lib/contracts";
 import {
   countMatchedBets,
+  DEFAULT_BET_LEDGER_FILTER,
   filterMatchedBets,
   getBetLifecycle,
+  shouldShowFirstUseBetLedgerEmpty,
 } from "../lib/bet-ledger";
 
 type TestBet = {
@@ -75,4 +77,13 @@ test("counts My live, current, pending, resolved, voided, and all matched bets",
     void: 1,
     all: 5,
   });
+});
+
+test("keeps the zero-bet first-use card from hiding an explicit My live view", () => {
+  assert.equal(
+    shouldShowFirstUseBetLedgerEmpty(0, DEFAULT_BET_LEDGER_FILTER),
+    true,
+  );
+  assert.equal(shouldShowFirstUseBetLedgerEmpty(0, "mine"), false);
+  assert.equal(shouldShowFirstUseBetLedgerEmpty(1, "current"), false);
 });

@@ -5,6 +5,13 @@ export type BetLedgerFilter = BetLifecycle | "mine" | "current" | "all";
 
 export const DEFAULT_BET_LEDGER_FILTER: BetLedgerFilter = "current";
 
+export function shouldShowFirstUseBetLedgerEmpty(
+  totalBetCount: number,
+  statusFilter: BetLedgerFilter,
+): boolean {
+  return totalBetCount === 0 && statusFilter === DEFAULT_BET_LEDGER_FILTER;
+}
+
 export function getBetLifecycle(status: BetStatus): BetLifecycle {
   if (status === "pending") return "pending";
   if (status === "void") return "void";
