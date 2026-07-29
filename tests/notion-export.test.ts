@@ -13,6 +13,7 @@ const matchedBet: MatchedBetExport = {
   betId: "bet-123",
   makerName: "Alice alice@example.com",
   takerName: "Bob",
+  makerPosition: "fade",
   makerRiskCents: 10_00,
   takerRiskCents: 15_00,
   status: "pending",
@@ -33,6 +34,7 @@ const matchedBet: MatchedBetExport = {
   revisions: [
     {
       revisionNumber: 1,
+      makerPosition: "back",
       makerRiskCents: 8_00,
       takerRiskCents: 12_00,
       proposerName: "Alice",
@@ -45,6 +47,7 @@ const matchedBet: MatchedBetExport = {
     },
     {
       revisionNumber: 2,
+      makerPosition: "fade",
       makerRiskCents: 10_00,
       takerRiskCents: 15_00,
       proposerName: "Bob",
@@ -86,7 +89,13 @@ test("Notion properties contain the stable external key and readable history", (
   assert.match(serialized, /bet-123/);
   assert.match(serialized, /Revision 2/);
   assert.match(serialized, /Will the Giants win/);
+  assert.match(serialized, /Alice: Back.*Fade/);
+  assert.match(serialized, /Alice fades this parlay/);
   assert.doesNotMatch(serialized, /alice@example\.com/i);
+  assert.deepEqual(properties["Maker Position"], {
+    type: "select",
+    select: { name: "fade" },
+  });
   assert.deepEqual(properties["Maker Risk"], {
     type: "number",
     number: 10,

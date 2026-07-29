@@ -109,3 +109,83 @@ test("parses an explicit counteroffer decline", () => {
       error.message === "counterId is required.",
   );
 });
+
+test("parses Back and Fade positions while preserving legacy defaults", () => {
+  const legs = [
+    {
+      marketId: "market-1",
+      marketRevisionId: "market-revision-1",
+      selection: "a",
+    },
+    {
+      marketId: "market-2",
+      marketRevisionId: "market-revision-2",
+      selection: "b",
+    },
+  ];
+
+  assert.deepEqual(
+    parseAppAction({
+      type: "create_offer",
+      makerRiskCents: 1_000,
+      takerRiskCents: 1_500,
+      makerPosition: "fade",
+      legs,
+    }),
+    {
+      type: "create_offer",
+      makerRiskCents: 1_000,
+      takerRiskCents: 1_500,
+      makerPosition: "fade",
+      legs,
+    },
+  );
+  assert.deepEqual(
+    parseAppAction({
+      type: "create_offer",
+      makerRiskCents: 1_000,
+      takerRiskCents: 1_500,
+      legs,
+    }),
+    {
+      type: "create_offer",
+      makerRiskCents: 1_000,
+      takerRiskCents: 1_500,
+      makerPosition: "back",
+      legs,
+    },
+  );
+  assert.deepEqual(
+    parseAppAction({
+      type: "propose_bet_revision",
+      betId: "bet-1",
+      makerRiskCents: 1_000,
+      takerRiskCents: 1_500,
+      makerPosition: "fade",
+      changeNote: "Maker now fades the parlay",
+      legs,
+    }),
+    {
+      type: "propose_bet_revision",
+      betId: "bet-1",
+      makerRiskCents: 1_000,
+      takerRiskCents: 1_500,
+      makerPosition: "fade",
+      changeNote: "Maker now fades the parlay",
+      legs,
+    },
+  );
+
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "create_offer",
+        makerRiskCents: 1_000,
+        takerRiskCents: 1_500,
+        makerPosition: "sometimes",
+        legs,
+      }),
+    (error: unknown) =>
+      error instanceof AppError && error.code === "INVALID_POSITION",
+  );
+});

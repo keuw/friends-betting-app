@@ -36,6 +36,19 @@ test("grades parlays from the maker proposition", () => {
   assert.equal(gradeParlay([]), "void");
 });
 
+test("grades Back and Fade as exact complementary parlay positions", () => {
+  assert.equal(gradeParlay(["won", "won"], "back"), "maker_won");
+  assert.equal(gradeParlay(["won", "won"], "fade"), "taker_won");
+  assert.equal(gradeParlay(["lost", "pending"], "back"), "taker_won");
+  assert.equal(gradeParlay(["lost", "pending"], "fade"), "maker_won");
+  assert.equal(gradeParlay(["won", "pending"], "back"), "pending");
+  assert.equal(gradeParlay(["won", "pending"], "fade"), "pending");
+  assert.equal(gradeParlay(["won", "void"], "back"), "maker_won");
+  assert.equal(gradeParlay(["won", "void"], "fade"), "taker_won");
+  assert.equal(gradeParlay(["void", "void"], "back"), "void");
+  assert.equal(gradeParlay(["void", "void"], "fade"), "void");
+});
+
 test("allows bet revisions only while every proposed leg is open", () => {
   const now = Date.parse("2026-07-28T12:00:00.000Z");
   assert.equal(

@@ -155,6 +155,24 @@ test("counteroffer recipients can decline without consuming the root offer", asy
   assert.match(clientBundle, /Counter declined\. The original offer stays open\./);
 });
 
+test("parlay offers can explicitly Back or Fade with complementary role copy", async () => {
+  const [serverBundle, clientBundle, migrations] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readMigrations(),
+  ]);
+
+  assert.match(migrations, /maker_position/);
+  assert.match(serverBundle, /FADE_REQUIRES_PARLAY/);
+  assert.match(serverBundle, /makerPosition/);
+  assert.match(clientBundle, /Back this parlay/);
+  assert.match(clientBundle, /Fade this parlay/);
+  assert.match(clientBundle, /FADING PARLAY/);
+  assert.match(clientBundle, /wins if any pick misses/);
+  assert.match(clientBundle, /backs it/);
+  assert.match(clientBundle, /fades it/);
+});
+
 test("weekly Notion export is protected, idempotent, and contains no committed token", async () => {
   const [serverBundle, migrations, schedulerConfig] = await Promise.all([
     readFile(new URL("dist/server/index.js", root), "utf8"),
