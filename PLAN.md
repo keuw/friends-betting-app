@@ -1,7 +1,8 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 12 complete, verified, pushed, and deployed.
+**Status:** Phase 12 complete and deployed; Phase 13 planned and awaiting
+approval.
 
 ## Product contract
 
@@ -11,8 +12,8 @@ counteroffers, and accept exactly one opponent per offer. The application
 records real-world dollar obligations but never holds money, connects to a
 payment provider, or verifies payments.
 
-Every accepted bet, edit proposal, revision, and debt-settlement action is
-visible to signed-in members.
+Every accepted bet, edit proposal, revision, mutual-void request, and
+debt-settlement action is visible to signed-in members.
 
 ## Locked mechanics
 
@@ -58,6 +59,13 @@ visible to signed-in members.
   explicitly accepts the proposed revision.
 - Bet revisions may be proposed and accepted only while the bet is pending and
   every proposed leg remains open before its own betting deadline.
+- Either participant may request that a pending matched bet be voided, but the
+  bet stays active until the other participant explicitly agrees.
+- A mutually voided bet is never deleted. Its frozen terms, reason, responses,
+  and audit history remain visible, and it creates no debt.
+- Final bets and their debts cannot be reversed through mutual void. Any future
+  settled-bet correction requires a separate, explicitly designed debt-reversal
+  workflow.
 - Accepted offers, counteroffers, market revisions, bet revisions, and their
   response history remain immutable.
 - Market resolution creates a pairwise debt from loser to winner.
@@ -159,6 +167,15 @@ visible to signed-in members.
 - `id`, `bet_revision_id`, `market_revision_id`, `maker_selection`.
 - Unique `(bet_revision_id, market_revision_id)`.
 
+### `bet_void_requests`
+
+- `id`, `bet_id`, `base_revision_id`.
+- `requester_user_id`, `recipient_user_id`.
+- Required `reason`.
+- `status`: `pending`, `accepted`, `rejected`, `cancelled`, or `superseded`.
+- `created_at`, `responded_at`.
+- At most one `pending` mutual-void request per bet.
+
 ### `debts`
 
 - `id`, unique `bet_id`.
@@ -208,6 +225,21 @@ Market and matched-bet editing also use the database as the sole arbiter:
    winning transition. Losing requests return a structured `409` and never
    alter active bet terms.
 
+Mutual voiding follows the same single-winner transition model:
+
+1. A request records the exact active bet revision, both participants, and the
+   required reason without changing the bet.
+2. Only the named recipient may accept or reject it; only the requester may
+   cancel it.
+3. Acceptance atomically rechecks that the bet is still pending on the recorded
+   base revision, changes the bet to `void`, and supersedes any pending term
+   revision.
+4. Accepting a term revision or settling the bet supersedes an older pending
+   mutual-void request.
+5. A resolution-versus-void race produces exactly one final bet state. A mutual
+   void creates no debt; a settlement that wins the race creates exactly one
+   debt; the losing response returns a structured `409`.
+
 ## Server surface
 
 - `GET /api/state` — signed-in application snapshot.
@@ -222,6 +254,9 @@ Market and matched-bet editing also use the database as the sole arbiter:
   - `propose_bet_revision`
   - `respond_bet_revision`
   - `cancel_bet_revision`
+  - `request_bet_void`
+  - `respond_bet_void`
+  - `cancel_bet_void`
   - `propose_offline_settlement`
   - `respond_offline_settlement`
 
@@ -962,6 +997,159 @@ Acceptance:
   partial terms, contradictory results, or duplicate debts.
 - Existing authentication, market editing, counteroffer decline, settlement,
   weekly export, and public-audit behavior continues to pass.
+
+### Phase 13 — Mutually void a pending matched bet
+
+Let either participant ask to end a pending matched bet when both friends
+agree. This is an audited lifecycle transition to `void`, never deletion: the
+offer, accepted terms, revisions, request reason, and responses remain visible
+to the group.
+
+Lifecycle contract:
+
+- Only the maker or taker may request a mutual void, and the requester must
+  provide a reason between 3 and 200 characters.
+- A request names the other participant as its only recipient and captures the
+  bet's exact `current_revision_id` as `base_revision_id`.
+- At most one mutual-void request may be pending for a bet. Rejected,
+  cancelled, accepted, and superseded requests remain immutable history, and a
+  new request may be made only while the bet is still pending.
+- The matched bet remains active while the request is pending. Its markets may
+  still resolve, its outcome may settle, and a debt may still be created.
+- Only the recipient may choose `accepted` or `rejected`. The requester may
+  cancel a pending request but may not approve their own request.
+- Rejection or cancellation leaves the bet and its active revision unchanged.
+- Acceptance is allowed only while the bet remains pending on the captured base
+  revision. It sets the bet status to `void`, records `settled_at`, and creates
+  no debt.
+- Accepted mutual voids never remove rows. The voided bet stays on Every
+  matched bet with its final terms and full mutual-void history.
+- Bets already won, lost, or void are final. This phase does not delete debts,
+  reverse confirmed settlement history, or add corrections for a settled bet.
+
+Revision and settlement interaction:
+
+- A pending mutual-void request and a pending term revision may coexist because
+  they ask different questions, but only one can win a conflicting response
+  race.
+- Accepting a term revision supersedes every pending void request tied to the
+  old active revision. The participants must create a fresh request if they
+  still want to void the newly accepted terms.
+- Accepting a mutual void supersedes every pending term revision because final
+  bets cannot activate new terms.
+- Market settlement, including an all-leg market void, supersedes any pending
+  mutual-void request after the bet leaves `pending`.
+- Request creation and every response use conditional D1 writes, the partial
+  unique pending-request index, the base revision, named participants, and bet
+  status as server-side guards.
+- Concurrent accept/reject/cancel responses produce one terminal request
+  status. A concurrent market resolution or term-revision acceptance produces
+  one valid bet transition, no partial history, and at most one debt.
+- Repeated delivery of the already-recorded response by its authorized actor is
+  idempotent; stale or conflicting responses return a structured `409`.
+
+Interface and public-history contract:
+
+- A participant sees `Request mutual void` only on a pending matched bet. The
+  inline form explains that the current bet remains active until the friend
+  agrees and requires the reason before submission.
+- Every signed-in group member sees the pending request, its reason, requester,
+  recipient, creation time, and the captured bet revision.
+- The recipient sees `Agree and void bet` and `Keep bet`; the requester sees
+  `Cancel request`. Controls expose disabled, busy, success, stale, and error
+  states without optimistic final-state changes.
+- The acceptance control clearly warns that agreement is final, produces no
+  debt, and does not erase the record.
+- Each matched-bet card exposes append-only `Void history` showing accepted,
+  rejected, cancelled, and superseded requests with response times.
+- An accepted request leaves the card visible with a `VOIDED` status, the
+  unchanged active terms, and an explanation that the participants ended it by
+  agreement.
+- Audit events cover user-authored request, acceptance, rejection, and
+  cancellation actions without identity emails or secrets; the immutable
+  request row records automatic supersession.
+- The controls remain keyboard accessible and readable on narrow screens, and
+  the existing revision editor and participant ribbon remain unambiguous.
+
+Persistence and archive contract:
+
+- Add typed `BetVoidRequestStatus` and `BetVoidRequestView` contracts plus
+  `request_bet_void`, `respond_bet_void`, and `cancel_bet_void` actions.
+- Add a dedicated `bet_void_requests` table with participant, base-revision,
+  status, reason, and timestamp constraints; do not overload term revisions or
+  add a hard-delete endpoint.
+- Add a partial unique index for one pending request per bet plus indexes for
+  bet history and recipient response lookup.
+- Runtime initialization and the generated Drizzle migration must be additive
+  and idempotent. They must not rebuild `bets`, `bet_revisions`, or any table
+  referenced by existing production foreign keys.
+- The application snapshot returns complete void-request history for every
+  displayed bet, with server-derived response and cancellation permissions.
+- The weekly Notion archive includes a `Void History` property containing base
+  revision, participants, reason, status, and timestamps. Canonical payload
+  hashing includes this history so affected records update exactly once.
+- Notion serialization redacts identity-like email strings from reasons and
+  names, while an export failure remains isolated from betting and settlement.
+
+Implementation:
+
+- [ ] Add failing parser tests for required reasons, exact accepted/rejected
+  decisions, IDs, length bounds, and the three new action variants.
+- [ ] Add a failing production D1 test covering participant authorization,
+  public request visibility, reject, cancel, accept, repeat delivery, one
+  pending request, no debt after agreement, and final-bet rejection.
+- [ ] Add production race regressions for accept-versus-reject,
+  mutual-void-versus-market-resolution, and mutual-void-versus-bet-revision
+  acceptance, proving one final state and at most one debt.
+- [ ] Add `BetVoidRequestStatus`, state views, and action contracts in
+  `lib/contracts.ts` and strict untrusted-input parsing in
+  `lib/action-parser.ts`.
+- [ ] Add `bet_void_requests` to `db/schema.ts` and runtime initialization in
+  `db/index.ts`; generate and inspect the next additive Drizzle migration.
+- [ ] Extend `lib/server.ts` state queries and mappings with full request
+  history and server-derived capabilities for the current viewer.
+- [ ] Implement request, respond, cancel, supersession, idempotency, audit, and
+  structured conflict paths with conditional D1 batches and base-revision
+  guards.
+- [ ] Update market settlement and bet-revision acceptance so either transition
+  supersedes stale pending mutual-void requests without changing completed
+  history.
+- [ ] Build the inline request form, pending decision panel, response controls,
+  accepted-void explanation, and append-only history in
+  `app/BettingApp.tsx` and `app/globals.css`.
+- [ ] Extend the Notion export repository, canonical types, renderer, archive
+  setup/reconciliation scripts, and unit tests with redacted `Void History`.
+- [ ] Update rendered-output and migration regressions plus `README.md`,
+  `CONTRIBUTING.md`, and archive documentation to explain mutual void versus
+  deletion and the settled-bet boundary.
+- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect the
+  generated SQL and packaged Worker for additive schema changes and no secrets.
+- [ ] Exercise separate maker, taker, and observer identities through request,
+  reject, cancel, accept, stale revision, and resolution-race paths against the
+  production-style D1 runtime.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  reconcile the Notion property and affected records, and verify the live app
+  and Worker logs.
+
+Acceptance:
+
+- Either matched-bet participant can request a mutual void with a visible
+  reason, and nobody else can create or answer that request.
+- The other participant can agree or decline; the requester can cancel; exactly
+  one concurrent response becomes final.
+- A pending request never pauses or changes the bet.
+- Mutual agreement changes a still-pending bet to `void`, creates no debt, and
+  never deletes its accepted terms or history.
+- A settled or otherwise voided bet cannot use this flow, and no existing debt
+  can be erased through it.
+- A term edit or market result that wins a race safely supersedes the stale
+  request; a mutual void that wins safely supersedes the pending edit.
+- Every signed-in member can audit the complete lifecycle in the app, and the
+  weekly Notion record preserves the same redacted history.
+- Existing authentication, offers, counteroffers, market editing, Back/Fade
+  parlays, bet revisions, settlement, export, and public activity behavior
+  continues to pass.
 
 ## Required verification
 
