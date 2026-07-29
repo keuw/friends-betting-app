@@ -16,6 +16,18 @@ async function readClientBundle() {
   ).join("\n");
 }
 
+async function readClientStyles() {
+  const clientAssetDirectory = new URL("dist/client/assets/", root);
+  const clientAssetNames = await readdir(clientAssetDirectory);
+  return (
+    await Promise.all(
+      clientAssetNames
+        .filter((name) => name.endsWith(".css"))
+        .map((name) => readFile(new URL(name, clientAssetDirectory), "utf8")),
+    )
+  ).join("\n");
+}
+
 async function readMigrations() {
   const migrationDirectory = new URL("../drizzle/", import.meta.url);
   const migrationNames = await readdir(migrationDirectory);
@@ -179,11 +191,13 @@ test("parlay offers can explicitly Back or Fade with complementary role copy", a
 });
 
 test("mutual matched-bet voids preserve public history and require agreement", async () => {
-  const [serverBundle, clientBundle, migrations] = await Promise.all([
-    readFile(new URL("dist/server/index.js", root), "utf8"),
-    readClientBundle(),
-    readMigrations(),
-  ]);
+  const [serverBundle, clientBundle, clientStyles, migrations] =
+    await Promise.all([
+      readFile(new URL("dist/server/index.js", root), "utf8"),
+      readClientBundle(),
+      readClientStyles(),
+      readMigrations(),
+    ]);
 
   assert.match(migrations, /CREATE TABLE `bet_void_requests`/);
   assert.match(migrations, /bet_void_requests_one_pending/);
@@ -197,6 +211,15 @@ test("mutual matched-bet voids preserve public history and require agreement", a
   assert.match(clientBundle, /Keep bet active/);
   assert.match(clientBundle, /Voided by mutual agreement/);
   assert.match(clientBundle, /Requests and responses stay public/);
+  assert.match(clientBundle, /to void this bet/);
+  assert.match(clientBundle, /Reason for requesting a void/);
+  assert.match(clientBundle, /Visible to everyone in bet history/);
+  assert.match(clientBundle, /characters used/);
+  assert.match(clientBundle, /This bet stays active until/);
+  assert.match(clientBundle, /Nothing changes because of this request unless/);
+  assert.match(clientStyles, /\.void-request-field/);
+  assert.match(clientStyles, /\.void-request-form-head/);
+  assert.match(clientStyles, /\.void-request-reason-block/);
 });
 
 test("market creators receive a guarded permanent-delete flow with inactive-offer cleanup", async () => {
