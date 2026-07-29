@@ -1894,8 +1894,9 @@ Implementation:
 - [/] Inspect Current, Pending, Resolved, Voided, All, and empty-result states
   at desktop and mobile widths. The in-app browser was unavailable; compiled
   responsive, accessible-control, and empty-state regressions pass.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
-  and verify the new filter controls and default void exclusion on the live app.
+- [x] Commit and push the exact verified source, deploy Sites version 18, and
+  verify the live bundle contains the new filter controls and default Current
+  explanation.
 
 Acceptance:
 
