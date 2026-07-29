@@ -11,7 +11,7 @@ const vinextCli = fileURLToPath(
 );
 
 test(
-  "matched-bet voids and conservative market deletion are race-safe in D1",
+  "matched-bet voids and terminal-offer market deletion are race-safe in D1",
   { timeout: 60_000 },
   async () => {
     const port = await availablePort();
@@ -39,6 +39,8 @@ test(
 
       const ownerView = marketFrom(await getState(baseUrl, maker), unused.id);
       assert.equal(ownerView.offerReferenceCount, 0);
+      assert.equal(ownerView.activeOfferReferenceCount, 0);
+      assert.equal(ownerView.removableOfferReferenceCount, 0);
       assert.equal(ownerView.betReferenceCount, 0);
       assert.equal(ownerView.canDelete, true);
       assert.equal(ownerView.deletionBlocker, null);
@@ -158,21 +160,50 @@ test(
         ).status,
         200,
       );
-      const blockedOfferMarket = marketFrom(
+      const removableOfferMarket = marketFrom(
         await getState(baseUrl, maker),
         offerMarket.id,
       );
-      assert.equal(blockedOfferMarket.offerReferenceCount, 1);
-      assert.equal(blockedOfferMarket.canDelete, false);
-      assert.match(blockedOfferMarket.deletionBlocker, /cancelled or expired/);
-      const blockedOfferDelete = await postAction(baseUrl, maker, {
+      assert.equal(removableOfferMarket.offerReferenceCount, 1);
+      assert.equal(removableOfferMarket.activeOfferReferenceCount, 0);
+      assert.equal(removableOfferMarket.removableOfferReferenceCount, 1);
+      assert.equal(removableOfferMarket.canDelete, true);
+      assert.equal(removableOfferMarket.deletionBlocker, null);
+      const cancelledOfferDelete = await postAction(baseUrl, maker, {
         type: "delete_market",
         marketId: offerMarket.id,
       });
-      assert.equal(blockedOfferDelete.status, 409);
+      assert.equal(cancelledOfferDelete.status, 200);
       assert.equal(
-        blockedOfferDelete.payload.error?.code,
-        "MARKET_IN_USE",
+        cancelledOfferDelete.payload.markets.some(
+          (candidate) => candidate.id === offerMarket.id,
+        ),
+        false,
+      );
+      assert.equal(
+        cancelledOfferDelete.payload.offers.some(
+          (candidate) => candidate.id === offer.id,
+        ),
+        false,
+      );
+      const cancelledOfferTombstone =
+        cancelledOfferDelete.payload.activity.find(
+          (activity) =>
+            activity.action === "deleted_inactive_offer" &&
+            activity.entityId === offer.id,
+        );
+      assert.ok(cancelledOfferTombstone);
+      assert.equal(cancelledOfferTombstone.metadata.status, "cancelled");
+      assert.equal(cancelledOfferTombstone.metadata.legCount, 1);
+      const cancelledMarketReceipt =
+        cancelledOfferDelete.payload.activity.find(
+          (activity) =>
+            activity.action === "deleted_market" &&
+            activity.entityId === offerMarket.id,
+        );
+      assert.equal(
+        cancelledMarketReceipt?.metadata.removedInactiveOfferCount,
+        1,
       );
 
       const expiredOfferMarket = await createMarket(
@@ -198,15 +229,98 @@ test(
         )?.status,
         "expired",
       );
+      const expiredOfferDelete = await postAction(baseUrl, maker, {
+        type: "delete_market",
+        marketId: expiredOfferMarket.id,
+      });
+      assert.equal(expiredOfferDelete.status, 200);
+      assert.equal(
+        expiredOfferDelete.payload.offers.some(
+          (candidate) => candidate.id === expiringOffer.id,
+        ),
+        false,
+      );
+
+      const parlayMarketA = await createMarket(
+        baseUrl,
+        maker,
+        `Cancelled parlay cleanup A ${stamp}`,
+      );
+      const parlayMarketB = await createMarket(
+        baseUrl,
+        maker,
+        `Cancelled parlay cleanup B ${stamp}`,
+      );
+      const parlayOfferResponse = await postAction(baseUrl, maker, {
+        type: "create_offer",
+        makerPosition: "back",
+        makerRiskCents: 1_500,
+        takerRiskCents: 2_000,
+        legs: [leg(parlayMarketA), leg(parlayMarketB)],
+      });
+      assert.equal(parlayOfferResponse.status, 200);
+      const parlayOffer = parlayOfferResponse.payload.offers.find(
+        (candidate) =>
+          candidate.status === "open" &&
+          candidate.legs.some(
+            (candidateLeg) => candidateLeg.marketId === parlayMarketA.id,
+          ) &&
+          candidate.legs.some(
+            (candidateLeg) => candidateLeg.marketId === parlayMarketB.id,
+          ),
+      );
+      assert.ok(parlayOffer);
+      assert.equal(
+        (
+          await postAction(baseUrl, taker, {
+            type: "create_counteroffer",
+            offerId: parlayOffer.id,
+            makerRiskCents: 1_250,
+            takerRiskCents: 2_250,
+          })
+        ).status,
+        200,
+      );
       assert.equal(
         (
           await postAction(baseUrl, maker, {
-            type: "delete_market",
-            marketId: expiredOfferMarket.id,
+            type: "cancel_offer",
+            offerId: parlayOffer.id,
           })
         ).status,
-        409,
+        200,
       );
+      const parlayCleanup = await postAction(baseUrl, maker, {
+        type: "delete_market",
+        marketId: parlayMarketA.id,
+      });
+      assert.equal(parlayCleanup.status, 200);
+      assert.equal(
+        parlayCleanup.payload.markets.some(
+          (candidate) => candidate.id === parlayMarketA.id,
+        ),
+        false,
+      );
+      assert.equal(
+        parlayCleanup.payload.offers.some(
+          (candidate) => candidate.id === parlayOffer.id,
+        ),
+        false,
+      );
+      const remainingParlayMarket = marketFrom(
+        parlayCleanup.payload,
+        parlayMarketB.id,
+      );
+      assert.equal(remainingParlayMarket.offerReferenceCount, 0);
+      assert.equal(remainingParlayMarket.canDelete, true);
+      const parlayTombstone = parlayCleanup.payload.activity.find(
+        (activity) =>
+          activity.action === "deleted_inactive_offer" &&
+          activity.entityId === parlayOffer.id,
+      );
+      assert.ok(parlayTombstone);
+      assert.equal(parlayTombstone.metadata.legCount, 2);
+      assert.equal(parlayTombstone.metadata.counterofferCount, 1);
 
       const betMarket = await createMarket(
         baseUrl,

@@ -9,7 +9,10 @@ import {
   type DebtEntry,
   type OfflineSettlementEntry,
 } from "../lib/domain";
-import { filterAndSortMarkets } from "../lib/market-ledger";
+import {
+  filterAndSortMarkets,
+  getMarketLifecycle,
+} from "../lib/market-ledger";
 import type { MarketView } from "../lib/contracts";
 
 test("derives American odds from exact two-sided risk", () => {
@@ -202,5 +205,81 @@ test("filters and orders the All markets ledger independently from the composer"
   assert.deepEqual(
     filterAndSortMarkets(markets, "voided", "all").map(({ id }) => id),
     ["void-latest"],
+  );
+});
+
+test("distinguishes offerable, closed-unresolved, resolved, and void markets", () => {
+  const now = Date.parse("2030-06-01T12:00:00.000Z");
+  const market = (
+    id: string,
+    status: MarketView["status"],
+    closesAt: string,
+  ): MarketView => ({
+    id,
+    question: `${id} question`,
+    description: `${id} context`,
+    selectionA: "Yes",
+    selectionB: "No",
+    closesAt,
+    status,
+    winningSelection: null,
+    creatorName: "Jordan",
+    createdByMe: false,
+    createdAt: "2026-07-28T12:00:00.000Z",
+    currentRevisionId: `${id}-revision-1`,
+    revisionNumber: 1,
+    offerReferenceCount: 0,
+    betReferenceCount: 0,
+    canDelete: false,
+    deletionBlocker: null,
+    revisions: [],
+  });
+  const markets = [
+    market("resolved-future", "resolved", "2035-01-01T00:00:00.000Z"),
+    market("closed-earlier", "open", "2029-01-01T00:00:00.000Z"),
+    market("open-earlier", "open", "2031-01-01T00:00:00.000Z"),
+    market("void-future", "void", "2036-01-01T00:00:00.000Z"),
+    market("closed-later", "open", "2030-05-01T00:00:00.000Z"),
+    market("open-later", "open", "2032-01-01T00:00:00.000Z"),
+  ];
+
+  assert.equal(
+    getMarketLifecycle(markets[0], Date.parse("2020-01-01T00:00:00.000Z")),
+    "resolved",
+  );
+  assert.equal(
+    getMarketLifecycle(
+      market("at-deadline", "open", "2030-06-01T12:00:00.000Z"),
+      now,
+    ),
+    "closed",
+  );
+  assert.equal(getMarketLifecycle(markets[2], now), "open");
+  assert.equal(getMarketLifecycle(markets[3], now), "void");
+
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "", "all", now).map(({ id }) => id),
+    [
+      "open-later",
+      "open-earlier",
+      "closed-later",
+      "closed-earlier",
+      "resolved-future",
+      "void-future",
+    ],
+  );
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "", "closed", now).map(({ id }) => id),
+    ["closed-later", "closed-earlier"],
+  );
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "awaiting result", "all", now).map(
+      ({ id }) => id,
+    ),
+    ["closed-later", "closed-earlier"],
+  );
+  assert.deepEqual(
+    filterAndSortMarkets(markets, "", "open", now).map(({ id }) => id),
+    ["open-later", "open-earlier"],
   );
 });

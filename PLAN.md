@@ -1333,6 +1333,284 @@ Acceptance:
   resolution, Back/Fade parlays, mutual bet revisions, debt settlement, Notion
   export, and public activity behavior continues to pass.
 
+### Phase 15 — Delete markets after terminal unmatched offers
+
+Relax Phase 14's conservative offer-history blocker so friends can clean up
+markets whose only offer references are cancelled or expired. The deletion
+remains creator-initiated and permanent; Sidebet does not automatically prune
+markets. Open offers and every matched bet continue to preserve the market and
+its immutable terms.
+
+Eligibility contract:
+
+- Only the market creator may delete the market.
+- An open offer using any revision of the market blocks deletion.
+- Any matched bet using any revision of the market blocks deletion, regardless
+  of whether the bet is pending, maker-won, taker-won, mutually voided, or
+  otherwise final. A settled bet is therefore always protected.
+- Accepted offers are protected through their matched bet. An accepted offer
+  without a corresponding bet is treated as inconsistent protected data and
+  must fail closed rather than be cleaned up.
+- Cancelled and expired offers do not block deletion when they have no matched
+  bet. Their terminal status must be rechecked in D1 during the mutation.
+- Market status is independent of deletion eligibility: open, resolved, and
+  void markets all follow the same reference rules.
+- This phase changes only manual deletion eligibility. It does not
+  automatically remove old markets or allow one user to delete a friend's
+  market.
+
+Inactive-offer cleanup contract:
+
+- Deleting a market also permanently removes every unmatched root offer in
+  `cancelled` or `expired` status that references it, together with all of that
+  offer's `offer_legs` and `counteroffers`.
+- A parlay is one indivisible offer. If a terminal unmatched parlay references
+  several markets, deleting any one of those markets removes the complete
+  inactive parlay and its counteroffer thread from all market views. Sidebet
+  must never retain or display a silently shortened parlay.
+- Before removing those rows, write an immutable
+  `deleted_inactive_offer` tombstone containing the root offer ID, terminal
+  status, non-secret terms, leg count, triggering market ID, and deletion
+  operation ID. Existing audit events remain append-only.
+- The market's `deleted_market` receipt records the number of terminal offers
+  removed in the same operation in addition to the existing question and
+  revision count.
+- Never delete an accepted offer, bet, bet revision, bet leg, void request,
+  debt, offline settlement, or Notion export. Any such reference aborts the
+  operation.
+
+State and interface contract:
+
+- Preserve `offerReferenceCount` as the total reference count for compatibility
+  and add explicit active and removable-terminal offer counts to `MarketView`.
+- Derive `canDelete` from creator ownership, zero active or otherwise
+  non-terminal offer references, and zero matched-bet references. Client counts
+  are explanatory only.
+- Creator-owned blocked cards say whether open offers, matched bets, or both
+  protect the market. Cancelled and expired offers no longer appear as blockers.
+- Rename the control from `Delete unused market` to `Delete market` because a
+  deletable market may now have terminal offer history.
+- The confirmation panel reports how many cancelled or expired offers and
+  counteroffer threads will also be removed. For a multi-market parlay, it
+  explicitly says the complete inactive parlay disappears from every market.
+- The client waits for the refreshed server snapshot and never optimistically
+  removes markets or offers.
+
+Atomicity and race contract:
+
+- Load the market and candidate terminal offer IDs for clear authorization and
+  conflict errors, but repeat every eligibility condition inside one D1 batch.
+- Use an operation-scoped audit gate inside the batch. Candidate tombstones,
+  counteroffer deletion, offer-leg deletion, root-offer deletion, market
+  revision deletion, and market deletion execute only when that gate proves
+  creator ownership, zero protected offer references, and zero bet references.
+- The tombstones form the exact candidate set used by later statements, so the
+  implementation does not depend on a large client-bound `IN` list and cannot
+  partially shorten a parlay.
+- Delete counteroffers before offer legs, root offers after their children,
+  market revisions after all eligible offer legs, and the market last to
+  satisfy current foreign keys without disabling enforcement or adding broad
+  cascades.
+- If an open offer, accepted offer, or bet reference wins a race, deletion
+  returns `409 MARKET_IN_USE` and changes no market, offer, counteroffer, or
+  audit record.
+- If deletion wins, a concurrent stale offer creation fails atomically with the
+  existing structured market-changed response and leaves no root offer, leg, or
+  audit fragment.
+- Cancellation or expiration racing with deletion may make the first deletion
+  return a retryable conflict, but must never create partial cleanup. A retry
+  against the refreshed state may then delete the market.
+
+Persistence and compatibility contract:
+
+- Prefer the existing tables and append-only `audit_events` as operation-scoped
+  tombstones; add no migration unless query-plan or integrity testing proves a
+  schema change is necessary.
+- Continue using the indexed `offer_legs.market_id`,
+  `offers.status`, and `bet_revision_legs.market_id` paths; inspect production
+  D1 query plans before deciding whether another additive index is warranted.
+- The weekly Notion archive is unchanged because every matched bet blocks
+  market deletion. Terminal unmatched offers are outside the matched-bet
+  export.
+- Update README and contribution guidance so nobody reintroduces the Phase 14
+  rule that cancelled and expired offers block forever.
+
+Threat model:
+
+- Treat all client capability flags, statuses, counts, offer IDs, actor IDs, and
+  cleanup claims as untrusted. The request continues to accept only `marketId`.
+- Never permit a client-supplied force, cascade, cleanup list, status, or
+  reference count.
+- Fail closed on accepted offers without bets, unknown offer statuses,
+  unexpected foreign-key references, missing candidate tombstones, or a final
+  market delete that does not affect exactly one row.
+- Do not expose user emails, SQL errors, or raw foreign-key details in the
+  activity receipt or conflict response.
+- Audit metadata may preserve public betting terms and IDs but must not contain
+  authentication data, service secrets, or external payment information.
+
+Implementation:
+
+- [ ] Replace the cancelled/expired blocker assertions with failing production
+  D1 tests proving both statuses become deletable while open offers remain
+  protected.
+- [ ] Add failing tests proving pending, won, lost, mutually voided, and settled
+  matched bets still block deletion and preserve all offer and bet history.
+- [ ] Add a terminal multi-market parlay test proving deletion removes the
+  whole inactive offer and counteroffer thread while leaving unrelated markets
+  intact and eligible state recalculated.
+- [ ] Add mixed-reference and race regressions proving an open or accepted
+  offer rolls back terminal-offer cleanup, cancellation/expiration races are
+  retry-safe, and create-offer-versus-delete remains atomic.
+- [ ] Extend `MarketView` and server row types with total, active/protected, and
+  removable terminal offer counts while preserving the existing total count.
+- [ ] Update the market-state query, `canDelete`, and blocker text to ignore
+  unmatched cancelled/expired offers without weakening matched-bet checks.
+- [ ] Implement the operation-gated D1 cleanup batch, immutable inactive-offer
+  tombstones, child-first deletion ordering, final market deletion, and
+  structured conflict handling.
+- [ ] Update the market card control, warning copy, confirmation details,
+  success message, responsive states, and rendered-output regressions.
+- [ ] Update `README.md` and `CONTRIBUTING.md` with the new eligibility,
+  multi-market parlay cleanup, audit, and race boundaries.
+- [ ] Inspect D1 query plans and generated schema output; add an additive index
+  only if the existing indexes are insufficient.
+- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect the
+  packaged Worker for destructive SQL, disabled foreign keys, or secrets.
+- [ ] Exercise separate creator, non-creator, and observer identities against
+  open-offer, cancelled-offer, expired-offer, matched-bet, and multi-market
+  parlay cases in the production-style D1 runtime.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify the new cleanup boundary on the live app without changing matched
+  bets or the Notion archive.
+
+Acceptance:
+
+- A creator can delete a market whose only offer references are cancelled or
+  expired, and every other viewer receives the same refreshed state.
+- The deletion removes the market, its revisions, and the complete terminal
+  unmatched offers that referenced it, including their legs and counteroffers.
+- An inactive multi-market parlay is removed as a whole; it is never rewritten
+  into a different bet.
+- Open offers and all matched-bet history, including final and settled bets,
+  continue to block deletion.
+- Any authorization failure, protected reference, stale candidate set, or race
+  leaves the database unchanged and returns a structured error.
+- Public audit receipts explain which market and inactive offers were removed
+  without exposing credentials or weakening existing history.
+- Existing authentication, market editing and resolution, Back/Fade parlays,
+  counteroffers, matched-bet revisions and voiding, debt settlement, weekly
+  Notion export, and public activity behavior continues to pass.
+
+### Phase 16 — Distinguish betting close from market resolution
+
+Make the market lifecycle explicit and show complete dates. Passing the betting
+deadline stops new offers but does not resolve the market; the creator still
+records the outcome later.
+
+Lifecycle contract:
+
+- `Open for offers` means the stored market status is `open` and `closesAt` is
+  in the future.
+- `Closed · awaiting result` means the stored market status is still `open` but
+  `closesAt` has passed.
+- `Resolved` means the creator recorded selection A or B as the result.
+- `Voided` means the creator recorded that the market has no winning
+  selection.
+- Closing is derived from the immutable betting deadline and current time. Do
+  not add a second persisted `closed` status or automatically resolve a market.
+- The server remains authoritative: after `closesAt`, it rejects new offers and
+  counteroffers even if a stale client still displays an old state.
+- Existing offers expire when their earliest leg closes. Matched bets remain
+  pending until every required market is resolved or voided.
+
+Date presentation contract:
+
+- Every absolute betting-close timestamp includes month, day, four-digit year,
+  hour, and minute in the viewer's local timezone.
+- Apply the same year-bearing formatter to market cards, offer legs, matched-bet
+  legs, revision history, and old-versus-new deadline comparisons so a date is
+  never ambiguous between years.
+- Preserve exact ISO timestamps in state and actions; this is a presentation
+  change only and must not rewrite stored deadlines.
+- Relative activity labels may remain relative, but any displayed absolute
+  timestamp includes its year.
+
+Markets-tab filter and card contract:
+
+- Replace the ambiguous `Open` filter label with `Open for offers`.
+- Add a separate `Closed · awaiting result` filter between open and resolved.
+- Keep `All`, `Resolved`, and `Voided`; every filter shows a count computed
+  from the same lifecycle classification used for its results.
+- Search recognizes `open`, `open for offers`, `closed`, `awaiting result`,
+  `resolved`, `void`, and `voided`.
+- Market cards use lifecycle badges rather than showing `open` for a deadline
+  that has already passed.
+- An open-for-offers card says `Closes …` and may show offer controls. A
+  closed-unresolved card says `Betting closed …`, hides offer controls, and
+  makes clear that the creator still needs to resolve it.
+- Editing terms remains available only before betting closes. Resolution
+  remains a separate creator action for open-for-offers or
+  closed-awaiting-result markets.
+- The lifecycle display advances while the page remains open using a small
+  shared clock tick; a reload is not required when a deadline passes.
+
+Ordering contract:
+
+- `All markets` orders lifecycle groups as Open for offers, Closed awaiting
+  result, Resolved, then Voided.
+- Within each group, preserve the requested close-date-descending order and use
+  creation time as the final stable tie-breaker.
+- The Board offer composer remains separate: it includes only open-for-offers
+  markets and keeps its earliest-closing-first order.
+
+Implementation:
+
+- [ ] Add failing unit tests for lifecycle classification immediately before,
+  at, and after `closesAt`, including resolved and void precedence.
+- [ ] Extend market-ledger tests for the new closed-awaiting-result filter,
+  counts/search vocabulary, lifecycle group order, and deterministic injected
+  current time.
+- [ ] Add rendered-output regressions for four-digit years, `Open for offers`,
+  `Closed · awaiting result`, `Betting closed`, and hidden post-close offer
+  controls.
+- [ ] Add a typed lifecycle helper shared by filtering, sorting, status copy,
+  counts, and card capabilities rather than duplicating date comparisons.
+- [ ] Extend `MarketLedgerFilter` and the Markets-tab filter controls with the
+  derived closed-awaiting-result state and unambiguous labels.
+- [ ] Update market badges, deadline copy, offer-control visibility, edit
+  capability, empty-state copy, and status search terms.
+- [ ] Add the lightweight UI clock tick and ensure it does not discard search,
+  filters, form input, selected offer legs, or other local state.
+- [ ] Add `year: "numeric"` to the shared absolute date formatter and audit
+  every `closesAt` rendering path for use of that formatter.
+- [ ] Update `README.md` and `CONTRIBUTING.md` with the close-versus-resolution
+  lifecycle and the server-authoritative offer cutoff.
+- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, and `npm run build`; verify there is no persistence
+  migration and no regression to server deadline enforcement.
+- [ ] Exercise future-open, past-unresolved, resolved, and void markets in the
+  production-style D1 runtime and confirm filter counts and offer rejection.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify the year-bearing dates and all five filters on the live app.
+
+Acceptance:
+
+- No market, offer leg, bet leg, or revision view displays a close date without
+  its year.
+- A market whose deadline passed but has no recorded result is visibly closed
+  to offers and remains visibly unresolved.
+- The Markets tab independently filters All, Open for offers, Closed awaiting
+  result, Resolved, and Voided markets with correct counts and ordering.
+- New-offer controls disappear at the deadline, and the server still rejects a
+  stale or forged post-close request.
+- Closing never invents a result, changes a matched bet, creates a debt, or
+  prevents the creator from resolving or voiding the market later.
+- Existing authentication, deletion eligibility, offers and counteroffers,
+  market revisions, parlays, mutual bet edits and voids, debt settlement,
+  Notion export, and public activity behavior continues to pass.
+
 ## Required verification
 
 ```text

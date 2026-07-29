@@ -104,9 +104,13 @@ test("All markets can be searched, filtered, and keeps its ledger order", async 
   assert.match(clientBundle, /Search all markets/);
   assert.match(clientBundle, /Question, context, outcome, creator, or status/);
   assert.match(clientBundle, /Filter markets by status/);
+  assert.match(clientBundle, /Open for offers/);
+  assert.match(clientBundle, /Closed · awaiting result/);
+  assert.match(clientBundle, /Betting closed/);
   assert.match(clientBundle, /Voided/);
   assert.match(clientBundle, /No matching markets/);
   assert.match(clientBundle, /Clear search and filters/);
+  assert.match(clientBundle, /year:"numeric"/);
   assert.match(
     serverBundle,
     /CASE m\.status WHEN 'open' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END/,
