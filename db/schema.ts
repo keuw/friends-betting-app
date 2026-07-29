@@ -149,6 +149,9 @@ export const offerLegs = sqliteTable(
     marketRevisionId: text("market_revision_id").references(
       () => marketRevisions.id,
     ),
+    originalMarketRevisionId: text(
+      "original_market_revision_id",
+    ).references(() => marketRevisions.id),
     makerSelection: text("maker_selection").notNull(),
   },
   (table) => [

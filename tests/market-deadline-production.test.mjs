@@ -337,6 +337,9 @@ async function editMarket(baseUrl, creator, market, overrides) {
 }
 
 async function createOffer(baseUrl, maker, legs) {
+  const existingOfferIds = new Set(
+    (await getState(baseUrl, maker)).offers.map((offer) => offer.id),
+  );
   const response = await postAction(baseUrl, maker, {
     type: "create_offer",
     makerRiskCents: 1_000,
@@ -347,6 +350,7 @@ async function createOffer(baseUrl, maker, legs) {
   const marketIds = new Set(legs.map((item) => item.marketId));
   const offer = response.payload.offers.find(
     (candidate) =>
+      !existingOfferIds.has(candidate.id) &&
       candidate.status === "open" &&
       candidate.legs.length === legs.length &&
       candidate.legs.every((candidateLeg) =>

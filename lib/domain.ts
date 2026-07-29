@@ -5,6 +5,14 @@ export type RevisionLegWindow = {
   closesAt: string;
 };
 
+export type MarketTerms = {
+  question: string;
+  description: string;
+  selectionA: string;
+  selectionB: string;
+  closesAt: string;
+};
+
 export type DebtEntry = {
   id: string;
   debtorUserId: string;
@@ -28,6 +36,30 @@ export type PairBalance = {
 
 export function isValidMoneyTerm(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
+}
+
+export function isDeadlineOnlyMarketExtension(
+  current: MarketTerms,
+  proposed: MarketTerms,
+): boolean {
+  return (
+    current.question === proposed.question &&
+    current.description === proposed.description &&
+    current.selectionA === proposed.selectionA &&
+    current.selectionB === proposed.selectionB &&
+    new Date(proposed.closesAt).getTime() >
+      new Date(current.closesAt).getTime()
+  );
+}
+
+export function isMarketDeadlineShortened(
+  current: Pick<MarketTerms, "closesAt">,
+  proposed: Pick<MarketTerms, "closesAt">,
+): boolean {
+  return (
+    new Date(proposed.closesAt).getTime() <
+    new Date(current.closesAt).getTime()
+  );
 }
 
 export function americanOdds(riskCents: number, profitCents: number): number {

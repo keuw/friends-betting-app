@@ -42,6 +42,17 @@ export function parseAppAction(input: unknown): AppAction {
         closesAt: requiredString(record.closesAt, "closesAt"),
         changeNote: requiredString(record.changeNote, "changeNote"),
       };
+    case "reopen_market":
+      return {
+        type,
+        marketId: requiredId(record.marketId, "marketId"),
+        baseRevisionId: requiredId(
+          record.baseRevisionId,
+          "baseRevisionId",
+        ),
+        closesAt: requiredString(record.closesAt, "closesAt"),
+        changeNote: requiredString(record.changeNote, "changeNote"),
+      };
     case "delete_market":
       return {
         type,

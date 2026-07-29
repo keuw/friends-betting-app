@@ -71,9 +71,12 @@ export type OfferLegView = {
   marketId: string;
   marketRevisionId: string;
   marketRevisionNumber: number;
+  originalMarketRevisionId: string;
+  originalMarketRevisionNumber: number;
   marketQuestion: string;
   marketDescription: string;
   marketClosesAt: string;
+  originalMarketClosesAt: string;
   makerSelection: Selection;
   makerSelectionLabel: string;
   takerSelectionLabel: string;
@@ -102,6 +105,7 @@ export type OfferView = {
   status: OfferStatus;
   createdAt: string;
   acceptedAt: string | null;
+  expiresAt: string | null;
   isMine: boolean;
   legs: OfferLegView[];
   counters: CounterofferView[];
@@ -235,6 +239,14 @@ export type EditMarketAction = {
   changeNote: string;
 };
 
+export type ReopenMarketAction = {
+  type: "reopen_market";
+  marketId: string;
+  baseRevisionId: string;
+  closesAt: string;
+  changeNote: string;
+};
+
 export type DeleteMarketAction = {
   type: "delete_market";
   marketId: string;
@@ -328,6 +340,7 @@ export type RespondOfflineSettlementAction = {
 export type AppAction =
   | CreateMarketAction
   | EditMarketAction
+  | ReopenMarketAction
   | DeleteMarketAction
   | CreateOfferAction
   | CreateCounterofferAction

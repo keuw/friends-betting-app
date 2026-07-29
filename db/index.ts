@@ -41,6 +41,12 @@ async function initializeSchema(): Promise<void> {
   );
   await ensureColumn(
     db,
+    "offer_legs",
+    "original_market_revision_id",
+    "ALTER TABLE offer_legs ADD COLUMN original_market_revision_id TEXT REFERENCES market_revisions(id)",
+  );
+  await ensureColumn(
+    db,
     "bets",
     "current_revision_id",
     "ALTER TABLE bets ADD COLUMN current_revision_id TEXT",
@@ -138,6 +144,7 @@ const SCHEMA_STATEMENTS = [
     offer_id TEXT NOT NULL REFERENCES offers(id),
     market_id TEXT NOT NULL REFERENCES markets(id),
     market_revision_id TEXT REFERENCES market_revisions(id),
+    original_market_revision_id TEXT REFERENCES market_revisions(id),
     maker_selection TEXT NOT NULL CHECK (maker_selection IN ('a', 'b')),
     UNIQUE(offer_id, market_id)
   )`,
@@ -296,6 +303,9 @@ const REVISION_BACKFILL_STATEMENTS = [
      WHERE markets.id = offer_legs.market_id
    )
    WHERE market_revision_id IS NULL`,
+  `UPDATE offer_legs
+   SET original_market_revision_id = market_revision_id
+   WHERE original_market_revision_id IS NULL`,
   `INSERT OR IGNORE INTO bet_revisions (
      id, bet_id, revision_number, maker_risk_cents, taker_risk_cents,
      maker_position, proposer_user_id, recipient_user_id, status, change_note,

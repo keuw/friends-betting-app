@@ -5,6 +5,8 @@ import {
   canAmendBet,
   derivePairBalances,
   gradeParlay,
+  isDeadlineOnlyMarketExtension,
+  isMarketDeadlineShortened,
   type DebtEntry,
   type LegResult,
   type OfflineSettlementEntry,
@@ -80,11 +82,11 @@ type OfferRow = {
   maker_position: ParlayPosition;
   status: OfferStatus;
   created_at: string;
+  expires_at: string | null;
   accepted_at: string | null;
 };
 
-type OfferLegRow = {
-  offer_id: string;
+type MarketLegRow = {
   market_id: string;
   market_revision_id: string;
   market_revision_number: number;
@@ -95,6 +97,13 @@ type OfferLegRow = {
   selection_b: string;
   maker_selection: Selection;
   market_status: MarketStatus;
+};
+
+type OfferLegRow = MarketLegRow & {
+  offer_id: string;
+  original_market_revision_id: string;
+  original_market_revision_number: number;
+  original_market_closes_at: string;
 };
 
 type CounterRow = {
@@ -146,7 +155,7 @@ type BetRevisionRow = {
   responded_at: string | null;
 };
 
-type BetRevisionLegRow = Omit<OfferLegRow, "offer_id"> & {
+type BetRevisionLegRow = MarketLegRow & {
   bet_revision_id: string;
 };
 
@@ -355,13 +364,19 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     ),
     db.prepare(
       `SELECT l.offer_id, l.market_id, l.market_revision_id,
+              l.original_market_revision_id,
               l.maker_selection, mr.revision_number AS market_revision_number,
+              original_mr.revision_number AS original_market_revision_number,
               mr.question AS market_question,
               mr.description AS market_description,
               mr.selection_a, mr.selection_b,
-              mr.closes_at AS market_closes_at, mr.status AS market_status
+              mr.closes_at AS market_closes_at,
+              original_mr.closes_at AS original_market_closes_at,
+              mr.status AS market_status
        FROM offer_legs l
        JOIN market_revisions mr ON mr.id = l.market_revision_id
+       JOIN market_revisions original_mr
+         ON original_mr.id = l.original_market_revision_id
        ORDER BY l.offer_id, mr.closes_at`,
     ),
     db.prepare(
@@ -561,6 +576,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
       status: offer.status,
       createdAt: offer.created_at,
       acceptedAt: offer.accepted_at,
+      expiresAt: offer.expires_at,
       isMine: offer.maker_user_id === user.id,
       legs: toLegViews(legsByOffer.get(offer.id) ?? []),
       counters: (countersByOffer.get(offer.id) ?? []).map((counter) => ({
@@ -713,6 +729,9 @@ export async function performAction(
       return;
     case "edit_market":
       await editMarket(user, action);
+      return;
+    case "reopen_market":
+      await reopenMarket(user, action);
       return;
     case "delete_market":
       await deleteMarket(user, action.marketId);
@@ -885,12 +904,17 @@ async function editMarket(
     current_revision_id: string;
     revision_number: number;
     revision_status: MarketStatus;
+    question: string;
+    description: string;
+    selection_a: string;
+    selection_b: string;
     revision_closes_at: string;
   }>(
     db
       .prepare(
         `SELECT m.creator_user_id, m.current_revision_id,
                 mr.revision_number, mr.status AS revision_status,
+                mr.question, mr.description, mr.selection_a, mr.selection_b,
                 mr.closes_at AS revision_closes_at
          FROM markets m
          JOIN market_revisions mr ON mr.id = m.current_revision_id
@@ -920,10 +944,35 @@ async function editMarket(
     );
   }
 
+  const currentTerms = {
+    question: current.question,
+    description: current.description,
+    selectionA: current.selection_a,
+    selectionB: current.selection_b,
+    closesAt: current.revision_closes_at,
+  };
+  const proposedTerms = {
+    question,
+    description,
+    selectionA,
+    selectionB,
+    closesAt: closesAt.toISOString(),
+  };
+  if (isMarketDeadlineShortened(currentTerms, proposedTerms)) {
+    throw new AppError(
+      400,
+      "DEADLINE_CANNOT_SHORTEN",
+      "A market deadline can stay the same or move later, but it cannot be shortened.",
+    );
+  }
+  const deadlineOnlyExtension = isDeadlineOnlyMarketExtension(
+    currentTerms,
+    proposedTerms,
+  );
   const revisionId = crypto.randomUUID();
   let results: D1Result<unknown>[];
   try {
-    results = await db.batch([
+    const statements: D1PreparedStatement[] = [
       db
         .prepare(
           `INSERT INTO market_revisions
@@ -975,7 +1024,82 @@ async function editMarket(
           action.baseRevisionId,
           revisionId,
         ),
-    ]);
+    ];
+    if (deadlineOnlyExtension) {
+      statements.push(
+        db
+          .prepare(
+            `UPDATE offer_legs
+             SET market_revision_id = ?
+             WHERE market_revision_id = ?
+               AND offer_id IN (
+                 SELECT o.id
+                 FROM offers o
+                 WHERE o.status = 'open'
+                   AND (
+                     o.expires_at IS NULL
+                     OR datetime(o.expires_at) > CURRENT_TIMESTAMP
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM offer_legs active_leg
+                     JOIN market_revisions active_market
+                       ON active_market.id = active_leg.market_revision_id
+                     WHERE active_leg.offer_id = o.id
+                       AND (
+                         active_market.status <> 'open'
+                         OR datetime(active_market.closes_at)
+                           <= CURRENT_TIMESTAMP
+                       )
+                   )
+               )
+               AND EXISTS (
+                 SELECT 1 FROM market_revisions WHERE id = ?
+               )`,
+          )
+          .bind(revisionId, action.baseRevisionId, revisionId),
+        db
+          .prepare(
+            `UPDATE offers
+             SET expires_at = (
+               SELECT MIN(mr.closes_at)
+               FROM offer_legs refreshed_leg
+               JOIN market_revisions mr
+                 ON mr.id = refreshed_leg.market_revision_id
+               WHERE refreshed_leg.offer_id = offers.id
+             )
+             WHERE status = 'open'
+               AND EXISTS (
+                 SELECT 1
+                 FROM offer_legs refreshed
+                 WHERE refreshed.offer_id = offers.id
+                   AND refreshed.market_id = ?
+                   AND refreshed.market_revision_id = ?
+               )`,
+          )
+          .bind(action.marketId, revisionId),
+      );
+    }
+    statements.push(
+      marketRevisionAuditStatement(
+        db,
+        user.id,
+        deadlineOnlyExtension
+          ? "extended_market_deadline"
+          : "edited_market",
+        revisionId,
+        {
+          marketId: action.marketId,
+          previousRevisionId: action.baseRevisionId,
+          revisionNumber: current.revision_number + 1,
+          previousClosesAt: current.revision_closes_at,
+          closesAt: closesAt.toISOString(),
+          changeNote,
+        },
+        deadlineOnlyExtension,
+      ),
+    );
+    results = await db.batch(statements);
   } catch (error) {
     const message = String(error).toLowerCase();
     if (
@@ -998,20 +1122,168 @@ async function editMarket(
       "This market changed or closed while you were editing. Review the latest terms.",
     );
   }
+}
 
-  await auditStatement(
-    db,
-    user.id,
-    "edited_market",
-    "market_revision",
-    revisionId,
-    {
-      marketId: action.marketId,
-      previousRevisionId: action.baseRevisionId,
-      revisionNumber: current.revision_number + 1,
-      changeNote,
-    },
-  ).run();
+async function reopenMarket(
+  user: AppUser,
+  action: Extract<AppAction, { type: "reopen_market" }>,
+): Promise<void> {
+  const changeNote = boundedText(action.changeNote, "Change note", 3, 200);
+  const closesAt = new Date(action.closesAt);
+  if (Number.isNaN(closesAt.getTime()) || closesAt.getTime() <= Date.now()) {
+    throw new AppError(
+      400,
+      "INVALID_CLOSE_TIME",
+      "Choose a future closing time.",
+    );
+  }
+
+  const db = getD1();
+  const current = await first<{
+    creator_user_id: string;
+    current_revision_id: string;
+    market_status: MarketStatus;
+    revision_number: number;
+    revision_status: MarketStatus;
+    question: string;
+    description: string;
+    selection_a: string;
+    selection_b: string;
+    revision_closes_at: string;
+  }>(
+    db
+      .prepare(
+        `SELECT m.creator_user_id, m.current_revision_id,
+                m.status AS market_status,
+                mr.revision_number, mr.status AS revision_status,
+                mr.question, mr.description, mr.selection_a, mr.selection_b,
+                mr.closes_at AS revision_closes_at
+         FROM markets m
+         JOIN market_revisions mr ON mr.id = m.current_revision_id
+         WHERE m.id = ?`,
+      )
+      .bind(action.marketId),
+  );
+  if (!current) {
+    throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
+  }
+  if (current.creator_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_MARKET_ORACLE",
+      "Only the market creator can reopen it.",
+    );
+  }
+  if (
+    current.market_status !== "open" ||
+    current.revision_status !== "open"
+  ) {
+    throw new AppError(
+      409,
+      "MARKET_FINAL",
+      "Resolved and voided markets cannot be reopened.",
+    );
+  }
+  if (current.current_revision_id !== action.baseRevisionId) {
+    throw new AppError(
+      409,
+      "MARKET_CHANGED",
+      "This market changed before it could be reopened. Review the latest revision.",
+    );
+  }
+  if (new Date(current.revision_closes_at).getTime() > Date.now()) {
+    throw new AppError(
+      409,
+      "MARKET_NOT_CLOSED",
+      "This market is still open. Use Edit market to extend its deadline.",
+    );
+  }
+
+  const revisionId = crypto.randomUUID();
+  let results: D1Result<unknown>[];
+  try {
+    results = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO market_revisions
+            (id, market_id, revision_number, question, description,
+             selection_a, selection_b, closes_at, editor_user_id, change_note)
+           SELECT ?, m.id, mr.revision_number + 1,
+                  mr.question, mr.description, mr.selection_a, mr.selection_b,
+                  ?, ?, ?
+           FROM markets m
+           JOIN market_revisions mr ON mr.id = m.current_revision_id
+           WHERE m.id = ?
+             AND m.current_revision_id = ?
+             AND m.status = 'open'
+             AND mr.status = 'open'
+             AND datetime(mr.closes_at) <= CURRENT_TIMESTAMP`,
+        )
+        .bind(
+          revisionId,
+          closesAt.toISOString(),
+          user.id,
+          changeNote,
+          action.marketId,
+          action.baseRevisionId,
+        ),
+      db
+        .prepare(
+          `UPDATE markets
+           SET closes_at = ?, current_revision_id = ?
+           WHERE id = ?
+             AND current_revision_id = ?
+             AND status = 'open'
+             AND EXISTS (
+               SELECT 1
+               FROM market_revisions
+               WHERE id = ? AND market_id = markets.id
+             )`,
+        )
+        .bind(
+          closesAt.toISOString(),
+          revisionId,
+          action.marketId,
+          action.baseRevisionId,
+          revisionId,
+        ),
+      marketRevisionAuditStatement(
+        db,
+        user.id,
+        "reopened_market",
+        revisionId,
+        {
+          marketId: action.marketId,
+          previousRevisionId: action.baseRevisionId,
+          revisionNumber: current.revision_number + 1,
+          previousClosesAt: current.revision_closes_at,
+          closesAt: closesAt.toISOString(),
+          changeNote,
+        },
+      ),
+    ]);
+  } catch (error) {
+    const message = String(error).toLowerCase();
+    if (
+      message.includes("unique") ||
+      message.includes("foreign key") ||
+      message.includes("constraint failed")
+    ) {
+      throw new AppError(
+        409,
+        "MARKET_CHANGED",
+        "Another market revision was saved first. Review the latest terms.",
+      );
+    }
+    throw error;
+  }
+  if (results[0].meta.changes !== 1 || results[1].meta.changes !== 1) {
+    throw new AppError(
+      409,
+      "MARKET_CHANGED",
+      "This market changed before it could be reopened. Review the latest revision.",
+    );
+  }
 }
 
 async function deleteMarket(
@@ -1370,13 +1642,15 @@ async function createOffer(
       db
         .prepare(
           `INSERT INTO offer_legs
-            (id, offer_id, market_id, market_revision_id, maker_selection)
-           VALUES (?, ?, ?, ?, ?)`,
+            (id, offer_id, market_id, market_revision_id,
+             original_market_revision_id, maker_selection)
+           VALUES (?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           crypto.randomUUID(),
           offerId,
           leg.marketId,
+          leg.marketRevisionId,
           leg.marketRevisionId,
           leg.selection,
         ),
@@ -3349,6 +3623,63 @@ function auditStatement(
     );
 }
 
+function marketRevisionAuditStatement(
+  db: D1Database,
+  actorUserId: string,
+  action: string,
+  revisionId: string,
+  metadata: Record<string, unknown>,
+  countAffectedOffers = false,
+): D1PreparedStatement {
+  const metadataJson = JSON.stringify(metadata);
+  if (!countAffectedOffers) {
+    return db
+      .prepare(
+        `INSERT INTO audit_events
+          (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+         SELECT ?, ?, ?, 'market_revision', mr.id, ?
+         FROM market_revisions mr
+         WHERE mr.id = ?`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        actorUserId,
+        action,
+        metadataJson,
+        revisionId,
+      );
+  }
+
+  return db
+    .prepare(
+      `INSERT INTO audit_events
+        (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+       SELECT ?, ?, ?, 'market_revision', mr.id,
+              json_set(
+                ?,
+                '$.affectedOfferCount',
+                (
+                  SELECT COUNT(DISTINCT ol.offer_id)
+                  FROM offer_legs ol
+                  JOIN offers o ON o.id = ol.offer_id
+                  WHERE ol.market_revision_id = mr.id
+                    AND ol.original_market_revision_id
+                      <> ol.market_revision_id
+                    AND o.status = 'open'
+                )
+              )
+       FROM market_revisions mr
+       WHERE mr.id = ?`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      actorUserId,
+      action,
+      metadataJson,
+      revisionId,
+    );
+}
+
 function conditionalAuditStatement(
   db: D1Database,
   actorUserId: string,
@@ -3387,9 +3718,21 @@ function toLegViews(
     marketId: leg.market_id,
     marketRevisionId: leg.market_revision_id,
     marketRevisionNumber: leg.market_revision_number,
+    originalMarketRevisionId:
+      "original_market_revision_id" in leg
+        ? leg.original_market_revision_id
+        : leg.market_revision_id,
+    originalMarketRevisionNumber:
+      "original_market_revision_number" in leg
+        ? leg.original_market_revision_number
+        : leg.market_revision_number,
     marketQuestion: leg.market_question,
     marketDescription: leg.market_description,
     marketClosesAt: leg.market_closes_at,
+    originalMarketClosesAt:
+      "original_market_closes_at" in leg
+        ? leg.original_market_closes_at
+        : leg.market_closes_at,
     makerSelection: leg.maker_selection,
     makerSelectionLabel:
       leg.maker_selection === "a" ? leg.selection_a : leg.selection_b,
