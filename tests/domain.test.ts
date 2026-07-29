@@ -175,6 +175,10 @@ test("filters and orders the All markets ledger independently from the composer"
     createdAt: "2026-07-28T12:00:00.000Z",
     currentRevisionId: `${id}-revision-1`,
     revisionNumber: 1,
+    offerReferenceCount: 0,
+    betReferenceCount: 0,
+    canDelete: false,
+    deletionBlocker: null,
     revisions: [],
     ...overrides,
   });

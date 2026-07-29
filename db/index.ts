@@ -202,6 +202,22 @@ const SCHEMA_STATEMENTS = [
     UNIQUE(bet_revision_id, market_id)
   )`,
   `CREATE INDEX IF NOT EXISTS bet_revision_legs_market_revision_idx ON bet_revision_legs(market_revision_id)`,
+  `CREATE INDEX IF NOT EXISTS bet_revision_legs_market_idx ON bet_revision_legs(market_id)`,
+  `CREATE TABLE IF NOT EXISTS bet_void_requests (
+    id TEXT PRIMARY KEY NOT NULL,
+    bet_id TEXT NOT NULL REFERENCES bets(id),
+    base_revision_id TEXT NOT NULL REFERENCES bet_revisions(id),
+    requester_user_id TEXT NOT NULL REFERENCES users(id),
+    recipient_user_id TEXT NOT NULL REFERENCES users(id),
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'cancelled', 'superseded')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    responded_at TEXT,
+    CHECK (requester_user_id <> recipient_user_id)
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS bet_void_requests_one_pending ON bet_void_requests(bet_id) WHERE status = 'pending'`,
+  `CREATE INDEX IF NOT EXISTS bet_void_requests_bet_created_idx ON bet_void_requests(bet_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS bet_void_requests_recipient_status_idx ON bet_void_requests(recipient_user_id, status)`,
   `CREATE TABLE IF NOT EXISTS debts (
     id TEXT PRIMARY KEY NOT NULL,
     bet_id TEXT NOT NULL UNIQUE REFERENCES bets(id),

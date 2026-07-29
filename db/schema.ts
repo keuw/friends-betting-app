@@ -333,9 +333,54 @@ export const betRevisionLegs = sqliteTable(
       table.marketId,
     ),
     index("bet_revision_legs_market_revision_idx").on(table.marketRevisionId),
+    index("bet_revision_legs_market_idx").on(table.marketId),
     check(
       "bet_revision_legs_selection_check",
       sql`${table.makerSelection} IN ('a', 'b')`,
+    ),
+  ],
+);
+
+export const betVoidRequests = sqliteTable(
+  "bet_void_requests",
+  {
+    id: text("id").primaryKey(),
+    betId: text("bet_id")
+      .notNull()
+      .references(() => bets.id),
+    baseRevisionId: text("base_revision_id")
+      .notNull()
+      .references(() => betRevisions.id),
+    requesterUserId: text("requester_user_id")
+      .notNull()
+      .references(() => users.id),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id),
+    reason: text("reason").notNull(),
+    status: text("status").notNull().default("pending"),
+    createdAt: text("created_at").notNull().default(now),
+    respondedAt: text("responded_at"),
+  },
+  (table) => [
+    uniqueIndex("bet_void_requests_one_pending")
+      .on(table.betId)
+      .where(sql`${table.status} = 'pending'`),
+    index("bet_void_requests_bet_created_idx").on(
+      table.betId,
+      table.createdAt,
+    ),
+    index("bet_void_requests_recipient_status_idx").on(
+      table.recipientUserId,
+      table.status,
+    ),
+    check(
+      "bet_void_requests_status_check",
+      sql`${table.status} IN ('pending', 'accepted', 'rejected', 'cancelled', 'superseded')`,
+    ),
+    check(
+      "bet_void_requests_participants_check",
+      sql`${table.requesterUserId} <> ${table.recipientUserId}`,
     ),
   ],
 );

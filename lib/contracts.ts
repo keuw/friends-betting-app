@@ -9,6 +9,12 @@ export type BetRevisionStatus =
   | "rejected"
   | "cancelled"
   | "superseded";
+export type BetVoidRequestStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "cancelled"
+  | "superseded";
 export type SettlementStatus =
   | "pending"
   | "confirmed"
@@ -34,6 +40,10 @@ export type MarketView = {
   createdAt: string;
   currentRevisionId: string;
   revisionNumber: number;
+  offerReferenceCount: number;
+  betReferenceCount: number;
+  canDelete: boolean;
+  deletionBlocker: string | null;
   revisions: MarketRevisionView[];
 };
 
@@ -108,8 +118,10 @@ export type BetView = {
   myPosition: ParlayPosition | null;
   currentRevisionId: string;
   canProposeRevision: boolean;
+  canRequestVoid: boolean;
   legs: OfferLegView[];
   revisions: BetRevisionView[];
+  voidRequests: BetVoidRequestView[];
 };
 
 export type BetRevisionView = {
@@ -127,6 +139,20 @@ export type BetRevisionView = {
   canRespond: boolean;
   canCancel: boolean;
   legs: OfferLegView[];
+};
+
+export type BetVoidRequestView = {
+  id: string;
+  baseRevisionId: string;
+  baseRevisionNumber: number;
+  requesterName: string;
+  recipientName: string;
+  reason: string;
+  status: BetVoidRequestStatus;
+  createdAt: string;
+  respondedAt: string | null;
+  canRespond: boolean;
+  canCancel: boolean;
 };
 
 export type PairBalanceView = {
@@ -205,6 +231,11 @@ export type EditMarketAction = {
   changeNote: string;
 };
 
+export type DeleteMarketAction = {
+  type: "delete_market";
+  marketId: string;
+};
+
 export type CreateCounterofferAction = {
   type: "create_counteroffer";
   offerId: string;
@@ -261,6 +292,23 @@ export type CancelBetRevisionAction = {
   betRevisionId: string;
 };
 
+export type RequestBetVoidAction = {
+  type: "request_bet_void";
+  betId: string;
+  reason: string;
+};
+
+export type RespondBetVoidAction = {
+  type: "respond_bet_void";
+  betVoidRequestId: string;
+  decision: "accepted" | "rejected";
+};
+
+export type CancelBetVoidAction = {
+  type: "cancel_bet_void";
+  betVoidRequestId: string;
+};
+
 export type ProposeOfflineSettlementAction = {
   type: "propose_offline_settlement";
   creditorUserId: string;
@@ -276,6 +324,7 @@ export type RespondOfflineSettlementAction = {
 export type AppAction =
   | CreateMarketAction
   | EditMarketAction
+  | DeleteMarketAction
   | CreateOfferAction
   | CreateCounterofferAction
   | AcceptOfferAction
@@ -285,5 +334,8 @@ export type AppAction =
   | ProposeBetRevisionAction
   | RespondBetRevisionAction
   | CancelBetRevisionAction
+  | RequestBetVoidAction
+  | RespondBetVoidAction
+  | CancelBetVoidAction
   | ProposeOfflineSettlementAction
   | RespondOfflineSettlementAction;

@@ -29,6 +29,13 @@
       "when": 1785290117817,
       "tag": "0003_stale_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785299419845,
+      "tag": "0004_friendly_firebrand",
+      "breakpoints": true
     }
   ]
 }

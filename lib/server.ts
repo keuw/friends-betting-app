@@ -46,6 +46,8 @@ type MarketRow = {
   creator_name: string;
   current_revision_id: string;
   revision_number: number;
+  offer_reference_count: number;
+  bet_reference_count: number;
   created_at: string;
 };
 
@@ -143,6 +145,26 @@ type BetRevisionRow = {
 
 type BetRevisionLegRow = Omit<OfferLegRow, "offer_id"> & {
   bet_revision_id: string;
+};
+
+type BetVoidRequestRow = {
+  id: string;
+  bet_id: string;
+  base_revision_id: string;
+  base_revision_number: number;
+  requester_user_id: string;
+  requester_name: string;
+  recipient_user_id: string;
+  recipient_name: string;
+  reason: string;
+  status:
+    | "pending"
+    | "accepted"
+    | "rejected"
+    | "cancelled"
+    | "superseded";
+  created_at: string;
+  responded_at: string | null;
 };
 
 type DebtRow = {
@@ -268,6 +290,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     betsResult,
     betRevisionsResult,
     betRevisionLegsResult,
+    betVoidRequestsResult,
     debtsResult,
     settlementsResult,
     activityResult,
@@ -275,7 +298,18 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     db.prepare(`SELECT id, email, display_name FROM users`),
     db.prepare(
       `SELECT m.*, u.display_name AS creator_name,
-              mr.revision_number
+              mr.revision_number,
+              (
+                SELECT COUNT(DISTINCT ol.offer_id)
+                FROM offer_legs ol
+                WHERE ol.market_id = m.id
+              ) AS offer_reference_count,
+              (
+                SELECT COUNT(DISTINCT br.bet_id)
+                FROM bet_revision_legs brl
+                JOIN bet_revisions br ON br.id = brl.bet_revision_id
+                WHERE brl.market_id = m.id
+              ) AS bet_reference_count
        FROM markets m
        JOIN users u ON u.id = m.creator_user_id
        JOIN market_revisions mr ON mr.id = m.current_revision_id
@@ -352,6 +386,16 @@ export async function getAppState(user: AppUser): Promise<AppState> {
        ORDER BY brl.bet_revision_id, mr.closes_at`,
     ),
     db.prepare(
+      `SELECT vr.*, base.revision_number AS base_revision_number,
+              requester.display_name AS requester_name,
+              recipient.display_name AS recipient_name
+       FROM bet_void_requests vr
+       JOIN bet_revisions base ON base.id = vr.base_revision_id
+       JOIN users requester ON requester.id = vr.requester_user_id
+       JOIN users recipient ON recipient.id = vr.recipient_user_id
+       ORDER BY vr.bet_id, datetime(vr.created_at) ASC`,
+    ),
+    db.prepare(
       `SELECT id, debtor_user_id, creditor_user_id, amount_cents
        FROM debts`,
     ),
@@ -384,6 +428,9 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   const betRows = rows<BetRow>(betsResult);
   const betRevisionRows = rows<BetRevisionRow>(betRevisionsResult);
   const betRevisionLegRows = rows<BetRevisionLegRow>(betRevisionLegsResult);
+  const betVoidRequestRows = rows<BetVoidRequestRow>(
+    betVoidRequestsResult,
+  );
   const debtRows = rows<DebtRow>(debtsResult);
   const settlementRows = rows<SettlementRow>(settlementsResult);
 
@@ -397,6 +444,10 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   const legsByBetRevision = groupBy(
     betRevisionLegRows,
     (row) => row.bet_revision_id,
+  );
+  const voidRequestsByBet = groupBy(
+    betVoidRequestRows,
+    (row) => row.bet_id,
   );
 
   const pairBalances = derivePairBalances(
@@ -417,21 +468,41 @@ export async function getAppState(user: AppUser): Promise<AppState> {
 
   return {
     viewer: { id: user.id, displayName: user.displayName },
-    markets: marketRows.map((market) => ({
-      id: market.id,
-      question: market.question,
-      description: market.description,
-      selectionA: market.selection_a,
-      selectionB: market.selection_b,
-      closesAt: market.closes_at,
-      status: market.status,
-      winningSelection: market.winning_selection,
-      creatorName: market.creator_name,
-      createdByMe: market.creator_user_id === user.id,
-      createdAt: market.created_at,
-      currentRevisionId: market.current_revision_id,
-      revisionNumber: market.revision_number,
-      revisions: (revisionsByMarket.get(market.id) ?? []).map((revision) => ({
+    markets: marketRows.map((market) => {
+      const createdByMe = market.creator_user_id === user.id;
+      const canDelete =
+        createdByMe &&
+        market.offer_reference_count === 0 &&
+        market.bet_reference_count === 0;
+      const deletionBlocker = !createdByMe
+        ? null
+        : market.offer_reference_count > 0 &&
+            market.bet_reference_count > 0
+          ? `Referenced by ${market.offer_reference_count} offer(s) and ${market.bet_reference_count} matched bet(s).`
+          : market.offer_reference_count > 0
+            ? `Referenced by ${market.offer_reference_count} offer(s), including cancelled or expired offers.`
+            : market.bet_reference_count > 0
+              ? `Referenced by ${market.bet_reference_count} matched bet(s).`
+              : null;
+      return {
+        id: market.id,
+        question: market.question,
+        description: market.description,
+        selectionA: market.selection_a,
+        selectionB: market.selection_b,
+        closesAt: market.closes_at,
+        status: market.status,
+        winningSelection: market.winning_selection,
+        creatorName: market.creator_name,
+        createdByMe,
+        createdAt: market.created_at,
+        currentRevisionId: market.current_revision_id,
+        revisionNumber: market.revision_number,
+        offerReferenceCount: market.offer_reference_count,
+        betReferenceCount: market.bet_reference_count,
+        canDelete,
+        deletionBlocker,
+        revisions: (revisionsByMarket.get(market.id) ?? []).map((revision) => ({
         id: revision.id,
         revisionNumber: revision.revision_number,
         question: revision.question,
@@ -448,8 +519,9 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         isCurrent: revision.id === market.current_revision_id,
         canResolve:
           market.creator_user_id === user.id && revision.status === "open",
-      })),
-    })),
+        })),
+      };
+    }),
     offers: offerRows.map((offer) => ({
       id: offer.id,
       makerName: offer.maker_name,
@@ -481,6 +553,10 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         legsByBetRevision.get(bet.current_revision_id) ?? [];
       const isParticipant =
         bet.maker_user_id === user.id || bet.taker_user_id === user.id;
+      const voidRequests = voidRequestsByBet.get(bet.id) ?? [];
+      const hasPendingVoidRequest = voidRequests.some(
+        (request) => request.status === "pending",
+      );
       return {
         id: bet.id,
         makerName: bet.maker_name,
@@ -514,6 +590,8 @@ export async function getAppState(user: AppUser): Promise<AppState> {
               closesAt: leg.market_closes_at,
             })),
           ),
+        canRequestVoid:
+          isParticipant && bet.status === "pending" && !hasPendingVoidRequest,
         legs: toLegViews(activeLegRows),
         revisions: (revisionsByBet.get(bet.id) ?? []).map((revision) => ({
           id: revision.id,
@@ -534,6 +612,23 @@ export async function getAppState(user: AppUser): Promise<AppState> {
             revision.status === "pending" &&
             revision.proposer_user_id === user.id,
           legs: toLegViews(legsByBetRevision.get(revision.id) ?? []),
+        })),
+        voidRequests: voidRequests.map((request) => ({
+          id: request.id,
+          baseRevisionId: request.base_revision_id,
+          baseRevisionNumber: request.base_revision_number,
+          requesterName: request.requester_name,
+          recipientName: request.recipient_name,
+          reason: request.reason,
+          status: request.status,
+          createdAt: request.created_at,
+          respondedAt: request.responded_at,
+          canRespond:
+            request.status === "pending" &&
+            request.recipient_user_id === user.id,
+          canCancel:
+            request.status === "pending" &&
+            request.requester_user_id === user.id,
         })),
       };
     }),
@@ -589,6 +684,9 @@ export async function performAction(
     case "edit_market":
       await editMarket(user, action);
       return;
+    case "delete_market":
+      await deleteMarket(user, action.marketId);
+      return;
     case "create_offer":
       await createOffer(user, action);
       return;
@@ -624,6 +722,19 @@ export async function performAction(
       return;
     case "cancel_bet_revision":
       await cancelBetRevision(user, action.betRevisionId);
+      return;
+    case "request_bet_void":
+      await requestBetVoid(user, action.betId, action.reason);
+      return;
+    case "respond_bet_void":
+      await respondBetVoid(
+        user,
+        action.betVoidRequestId,
+        action.decision,
+      );
+      return;
+    case "cancel_bet_void":
+      await cancelBetVoid(user, action.betVoidRequestId);
       return;
     case "propose_offline_settlement":
       await proposeOfflineSettlement(
@@ -868,6 +979,138 @@ async function editMarket(
   ).run();
 }
 
+async function deleteMarket(
+  user: AppUser,
+  marketId: string,
+): Promise<void> {
+  const db = getD1();
+  const market = await first<{
+    id: string;
+    creator_user_id: string;
+    offer_reference_count: number;
+    bet_reference_count: number;
+  }>(
+    db
+      .prepare(
+        `SELECT m.id, m.creator_user_id,
+                (
+                  SELECT COUNT(DISTINCT ol.offer_id)
+                  FROM offer_legs ol
+                  WHERE ol.market_id = m.id
+                ) AS offer_reference_count,
+                (
+                  SELECT COUNT(DISTINCT br.bet_id)
+                  FROM bet_revision_legs brl
+                  JOIN bet_revisions br ON br.id = brl.bet_revision_id
+                  WHERE brl.market_id = m.id
+                ) AS bet_reference_count
+         FROM markets m
+         WHERE m.id = ?`,
+      )
+      .bind(marketId),
+  );
+  if (!market) {
+    throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
+  }
+  if (market.creator_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_MARKET_ORACLE",
+      "Only the market creator can delete it.",
+    );
+  }
+  if (
+    market.offer_reference_count > 0 ||
+    market.bet_reference_count > 0
+  ) {
+    throw new AppError(
+      409,
+      "MARKET_REFERENCED",
+      "This market has offer or matched-bet history and cannot be deleted.",
+    );
+  }
+
+  const auditId = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO audit_events
+          (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+         SELECT ?, ?, 'deleted_market', 'market', m.id,
+                json_object(
+                  'question', m.question,
+                  'revisionCount', (
+                    SELECT COUNT(*)
+                    FROM market_revisions mr
+                    WHERE mr.market_id = m.id
+                  )
+                )
+         FROM markets m
+         WHERE m.id = ?
+           AND m.creator_user_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM offer_legs ol WHERE ol.market_id = m.id
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM bet_revision_legs brl
+             WHERE brl.market_id = m.id
+           )`,
+      )
+      .bind(auditId, user.id, marketId, user.id),
+    db
+      .prepare(
+        `DELETE FROM market_revisions
+         WHERE market_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM markets m
+             WHERE m.id = market_revisions.market_id
+               AND m.creator_user_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM offer_legs ol
+             WHERE ol.market_id = market_revisions.market_id
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM bet_revision_legs brl
+             WHERE brl.market_id = market_revisions.market_id
+           )`,
+      )
+      .bind(marketId, user.id),
+    db
+      .prepare(
+        `DELETE FROM markets
+         WHERE id = ?
+           AND creator_user_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM market_revisions mr WHERE mr.market_id = markets.id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM offer_legs ol WHERE ol.market_id = markets.id
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM bet_revision_legs brl
+             WHERE brl.market_id = markets.id
+           )`,
+      )
+      .bind(marketId, user.id),
+  ]);
+  if (
+    results[0].meta.changes !== 1 ||
+    results[2].meta.changes !== 1
+  ) {
+    throw new AppError(
+      409,
+      "MARKET_CHANGED",
+      "This market changed or gained a reference before deletion.",
+    );
+  }
+}
+
 async function createOffer(
   user: AppUser,
   action: Extract<AppAction, { type: "create_offer" }>,
@@ -963,7 +1206,22 @@ async function createOffer(
       legCount: action.legs.length,
     }),
   );
-  await db.batch(statements);
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    const message = String(error).toLowerCase();
+    if (
+      message.includes("foreign key") ||
+      message.includes("constraint failed")
+    ) {
+      throw new AppError(
+        409,
+        "MARKET_CHANGED",
+        "A selected market changed or was deleted before the offer was posted.",
+      );
+    }
+    throw error;
+  }
 }
 
 async function createCounteroffer(
@@ -1988,6 +2246,21 @@ async function respondBetRevision(
            )`,
       )
       .bind(revision.id, user.id),
+    db
+      .prepare(
+        `UPDATE bet_void_requests
+         SET status = 'superseded', responded_at = CURRENT_TIMESTAMP
+         WHERE bet_id = ?
+           AND status = 'pending'
+           AND EXISTS (
+             SELECT 1
+             FROM bets b
+             WHERE b.id = bet_void_requests.bet_id
+               AND b.status = 'pending'
+               AND b.current_revision_id = ?
+           )`,
+      )
+      .bind(revision.bet_id, revision.id),
   ]);
   if (
     results[0].meta.changes !== 1 ||
@@ -2070,6 +2343,363 @@ async function cancelBetRevision(
     "bet_revision",
     betRevisionId,
   ).run();
+}
+
+async function requestBetVoid(
+  user: AppUser,
+  betId: string,
+  rawReason: string,
+): Promise<void> {
+  const reason = boundedText(rawReason, "Reason", 3, 200);
+  await settlePendingBets();
+
+  const db = getD1();
+  const bet = await first<{
+    id: string;
+    maker_user_id: string;
+    taker_user_id: string;
+    current_revision_id: string;
+    status: BetStatus;
+  }>(
+    db
+      .prepare(
+        `SELECT id, maker_user_id, taker_user_id, current_revision_id, status
+         FROM bets
+         WHERE id = ?`,
+      )
+      .bind(betId),
+  );
+  if (!bet) {
+    throw new AppError(404, "BET_NOT_FOUND", "Matched bet not found.");
+  }
+  if (bet.maker_user_id !== user.id && bet.taker_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_BET_PARTICIPANT",
+      "Only the two participants can request a void.",
+    );
+  }
+  if (bet.status !== "pending") {
+    throw new AppError(
+      409,
+      "BET_FINAL",
+      "Only pending matched bets can be voided by agreement.",
+    );
+  }
+
+  const requestId = crypto.randomUUID();
+  const recipientUserId =
+    user.id === bet.maker_user_id
+      ? bet.taker_user_id
+      : bet.maker_user_id;
+  let results: D1Result<unknown>[];
+  try {
+    results = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO bet_void_requests
+            (id, bet_id, base_revision_id, requester_user_id,
+             recipient_user_id, reason)
+           SELECT ?, b.id, b.current_revision_id, ?, ?, ?
+           FROM bets b
+           WHERE b.id = ?
+             AND b.status = 'pending'
+             AND b.current_revision_id = ?
+             AND NOT EXISTS (
+               SELECT 1
+               FROM bet_void_requests existing
+               WHERE existing.bet_id = b.id
+                 AND existing.status = 'pending'
+             )`,
+        )
+        .bind(
+          requestId,
+          user.id,
+          recipientUserId,
+          reason,
+          bet.id,
+          bet.current_revision_id,
+        ),
+      db
+        .prepare(
+          `INSERT INTO audit_events
+            (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+           SELECT ?, ?, 'requested_bet_void', 'bet_void_request', vr.id,
+                  json_object(
+                    'betId', vr.bet_id,
+                    'baseRevisionId', vr.base_revision_id,
+                    'reason', vr.reason
+                  )
+           FROM bet_void_requests vr
+           WHERE vr.id = ? AND vr.status = 'pending'`,
+        )
+        .bind(crypto.randomUUID(), user.id, requestId),
+    ]);
+  } catch (error) {
+    if (String(error).toLowerCase().includes("unique")) {
+      throw new AppError(
+        409,
+        "BET_VOID_PENDING",
+        "This bet already has a void request awaiting a response.",
+      );
+    }
+    throw error;
+  }
+  if (results[0].meta.changes !== 1) {
+    const latest = await first<{ status: BetStatus }>(
+      db.prepare(`SELECT status FROM bets WHERE id = ?`).bind(bet.id),
+    );
+    if (!latest || latest.status !== "pending") {
+      throw new AppError(
+        409,
+        "BET_FINAL",
+        "The bet settled before the void request was created.",
+      );
+    }
+    throw new AppError(
+      409,
+      "BET_VOID_PENDING",
+      "This bet already has a void request awaiting a response.",
+    );
+  }
+}
+
+async function respondBetVoid(
+  user: AppUser,
+  betVoidRequestId: string,
+  decision: "accepted" | "rejected",
+): Promise<void> {
+  const db = getD1();
+  const request = await first<{
+    id: string;
+    bet_id: string;
+    base_revision_id: string;
+    recipient_user_id: string;
+    status: BetVoidRequestRow["status"];
+    bet_status: BetStatus;
+    current_revision_id: string;
+  }>(
+    db
+      .prepare(
+        `SELECT vr.id, vr.bet_id, vr.base_revision_id,
+                vr.recipient_user_id, vr.status,
+                b.status AS bet_status, b.current_revision_id
+         FROM bet_void_requests vr
+         JOIN bets b ON b.id = vr.bet_id
+         WHERE vr.id = ?`,
+      )
+      .bind(betVoidRequestId),
+  );
+  if (!request) {
+    throw new AppError(
+      404,
+      "BET_VOID_NOT_FOUND",
+      "Void request not found.",
+    );
+  }
+  if (request.recipient_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_VOID_RECIPIENT",
+      "Only the other participant can respond.",
+    );
+  }
+  if (request.status === decision) return;
+  if (request.status !== "pending") {
+    throw new AppError(
+      409,
+      "BET_VOID_FINAL",
+      "This void request already has a response.",
+    );
+  }
+
+  if (decision === "rejected") {
+    const results = await db.batch([
+      db
+        .prepare(
+          `UPDATE bet_void_requests
+           SET status = 'rejected', responded_at = CURRENT_TIMESTAMP
+           WHERE id = ?
+             AND status = 'pending'
+             AND recipient_user_id = ?`,
+        )
+        .bind(request.id, user.id),
+      db
+        .prepare(
+          `INSERT INTO audit_events
+            (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+           SELECT ?, ?, 'rejected_bet_void', 'bet_void_request', vr.id,
+                  json_object('betId', vr.bet_id)
+           FROM bet_void_requests vr
+           WHERE vr.id = ? AND vr.status = 'rejected'`,
+        )
+        .bind(crypto.randomUUID(), user.id, request.id),
+    ]);
+    if (results[0].meta.changes !== 1) {
+      throw new AppError(
+        409,
+        "BET_VOID_FINAL",
+        "Another response was recorded first.",
+      );
+    }
+    return;
+  }
+
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE bet_void_requests
+         SET status = 'accepted', responded_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'pending'
+           AND recipient_user_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM bets b
+             WHERE b.id = bet_void_requests.bet_id
+               AND b.status = 'pending'
+               AND b.current_revision_id = bet_void_requests.base_revision_id
+           )`,
+      )
+      .bind(request.id, user.id),
+    db
+      .prepare(
+        `UPDATE bets
+         SET status = 'void', settled_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'pending'
+           AND current_revision_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM bet_void_requests vr
+             WHERE vr.id = ?
+               AND vr.bet_id = bets.id
+               AND vr.status = 'accepted'
+           )`,
+      )
+      .bind(request.bet_id, request.base_revision_id, request.id),
+    db
+      .prepare(
+        `UPDATE bet_revisions
+         SET status = 'superseded', responded_at = CURRENT_TIMESTAMP
+         WHERE bet_id = ?
+           AND status = 'pending'
+           AND EXISTS (
+             SELECT 1
+             FROM bets b
+             WHERE b.id = bet_revisions.bet_id
+               AND b.status = 'void'
+           )`,
+      )
+      .bind(request.bet_id),
+    db
+      .prepare(
+        `INSERT INTO audit_events
+          (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+         SELECT ?, ?, 'accepted_bet_void', 'bet_void_request', vr.id,
+                json_object(
+                  'betId', vr.bet_id,
+                  'baseRevisionId', vr.base_revision_id,
+                  'reason', vr.reason
+                )
+         FROM bet_void_requests vr
+         JOIN bets b ON b.id = vr.bet_id
+         WHERE vr.id = ?
+           AND vr.status = 'accepted'
+           AND b.status = 'void'`,
+      )
+      .bind(crypto.randomUUID(), user.id, request.id),
+  ]);
+  if (
+    results[0].meta.changes !== 1 ||
+    results[1].meta.changes !== 1
+  ) {
+    await db
+      .prepare(
+        `UPDATE bet_void_requests
+         SET status = 'superseded', responded_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'pending'
+           AND EXISTS (
+             SELECT 1
+             FROM bets b
+             WHERE b.id = bet_void_requests.bet_id
+               AND (
+                 b.status <> 'pending'
+                 OR b.current_revision_id <> bet_void_requests.base_revision_id
+               )
+           )`,
+      )
+      .bind(request.id)
+      .run();
+    throw new AppError(
+      409,
+      "BET_VOID_STALE",
+      "The bet settled or its terms changed before this void was accepted.",
+    );
+  }
+}
+
+async function cancelBetVoid(
+  user: AppUser,
+  betVoidRequestId: string,
+): Promise<void> {
+  const db = getD1();
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE bet_void_requests
+         SET status = 'cancelled', responded_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+           AND status = 'pending'
+           AND requester_user_id = ?`,
+      )
+      .bind(betVoidRequestId, user.id),
+    db
+      .prepare(
+        `INSERT INTO audit_events
+          (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+         SELECT ?, ?, 'cancelled_bet_void', 'bet_void_request', vr.id,
+                json_object('betId', vr.bet_id)
+         FROM bet_void_requests vr
+         WHERE vr.id = ? AND vr.status = 'cancelled'`,
+      )
+      .bind(crypto.randomUUID(), user.id, betVoidRequestId),
+  ]);
+  if (results[0].meta.changes === 1) return;
+
+  const request = await first<{
+    requester_user_id: string;
+    status: BetVoidRequestRow["status"];
+  }>(
+    db
+      .prepare(
+        `SELECT requester_user_id, status
+         FROM bet_void_requests
+         WHERE id = ?`,
+      )
+      .bind(betVoidRequestId),
+  );
+  if (!request) {
+    throw new AppError(
+      404,
+      "BET_VOID_NOT_FOUND",
+      "Void request not found.",
+    );
+  }
+  if (request.requester_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_VOID_REQUESTER",
+      "Only the requester can cancel this void request.",
+    );
+  }
+  if (request.status === "cancelled") return;
+  throw new AppError(
+    409,
+    "BET_VOID_FINAL",
+    "This void request already has a response.",
+  );
 }
 
 async function proposeOfflineSettlement(
@@ -2306,6 +2936,22 @@ async function settlePendingBets(): Promise<void> {
         ),
       );
     }
+    statements.push(
+      db
+        .prepare(
+          `UPDATE bet_void_requests
+           SET status = 'superseded', responded_at = CURRENT_TIMESTAMP
+           WHERE bet_id = ?
+             AND status = 'pending'
+             AND EXISTS (
+               SELECT 1
+               FROM bets b
+               WHERE b.id = bet_void_requests.bet_id
+                 AND b.status <> 'pending'
+             )`,
+        )
+        .bind(betId),
+    );
   }
 
   if (statements.length > 0) {

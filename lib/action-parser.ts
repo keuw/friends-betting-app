@@ -42,6 +42,11 @@ export function parseAppAction(input: unknown): AppAction {
         closesAt: requiredString(record.closesAt, "closesAt"),
         changeNote: requiredString(record.changeNote, "changeNote"),
       };
+    case "delete_market":
+      return {
+        type,
+        marketId: requiredId(record.marketId, "marketId"),
+      };
     case "create_offer":
       return {
         type,
@@ -126,6 +131,47 @@ export function parseAppAction(input: unknown): AppAction {
         betRevisionId: requiredId(
           record.betRevisionId,
           "betRevisionId",
+        ),
+      };
+    case "request_bet_void": {
+      const reason = requiredString(record.reason, "reason");
+      if (reason.length < 3 || reason.length > 200) {
+        throw new AppError(
+          400,
+          "INVALID_VOID_REASON",
+          "Reason must be between 3 and 200 characters.",
+        );
+      }
+      return {
+        type,
+        betId: requiredId(record.betId, "betId"),
+        reason,
+      };
+    }
+    case "respond_bet_void": {
+      const decision = requiredString(record.decision, "decision");
+      if (decision !== "accepted" && decision !== "rejected") {
+        throw new AppError(
+          400,
+          "INVALID_DECISION",
+          "Accept or reject the void request.",
+        );
+      }
+      return {
+        type,
+        betVoidRequestId: requiredId(
+          record.betVoidRequestId,
+          "betVoidRequestId",
+        ),
+        decision,
+      };
+    }
+    case "cancel_bet_void":
+      return {
+        type,
+        betVoidRequestId: requiredId(
+          record.betVoidRequestId,
+          "betVoidRequestId",
         ),
       };
     case "propose_offline_settlement":
