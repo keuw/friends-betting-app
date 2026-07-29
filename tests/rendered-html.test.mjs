@@ -139,6 +139,20 @@ test("market and matched-bet edits preserve immutable revision history", async (
   assert.match(clientBundle, /Current terms stay active until your friend accepts/);
 });
 
+test("counteroffer recipients can decline without consuming the root offer", async () => {
+  const [serverBundle, clientBundle] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+  ]);
+
+  assert.match(serverBundle, /decline_counteroffer/);
+  assert.match(serverBundle, /declined_counteroffer/);
+  assert.match(serverBundle, /NOT_COUNTER_RECIPIENT/);
+  assert.match(serverBundle, /COUNTER_STALE/);
+  assert.match(clientBundle, /Decline/);
+  assert.match(clientBundle, /Counter declined\. The original offer stays open\./);
+});
+
 test("weekly Notion export is protected, idempotent, and contains no committed token", async () => {
   const [serverBundle, migrations, schedulerConfig] = await Promise.all([
     readFile(new URL("dist/server/index.js", root), "utf8"),

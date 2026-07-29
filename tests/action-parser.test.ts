@@ -85,3 +85,27 @@ test("accepts only explicit bet-revision decisions", () => {
     },
   );
 });
+
+test("parses an explicit counteroffer decline", () => {
+  assert.deepEqual(
+    parseAppAction({
+      type: "decline_counteroffer",
+      counterId: "counter-1",
+    }),
+    {
+      type: "decline_counteroffer",
+      counterId: "counter-1",
+    },
+  );
+
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "decline_counteroffer",
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === "INVALID_FIELD" &&
+      error.message === "counterId is required.",
+  );
+});
