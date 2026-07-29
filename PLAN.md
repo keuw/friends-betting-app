@@ -1677,8 +1677,8 @@ Implementation:
   including empty, minimum-valid, maximum-length, disabled/busy, requester,
   recipient, and observer views. The in-app browser was unavailable during
   local verification; compiled responsive and accessibility regressions pass.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
-  and verify the polished form on the live app.
+- [x] Commit and push the exact verified source, deploy Sites version 16, and
+  verify the live app responds successfully with the Phase 17 stylesheet.
 
 Acceptance:
 
