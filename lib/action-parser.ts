@@ -66,6 +66,11 @@ export function parseAppAction(input: unknown): AppAction {
         offerId: requiredId(record.offerId, "offerId"),
         counterId: optionalId(record.counterId, "counterId"),
       };
+    case "decline_counteroffer":
+      return {
+        type,
+        counterId: requiredId(record.counterId, "counterId"),
+      };
     case "cancel_offer":
       return {
         type,

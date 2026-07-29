@@ -582,6 +582,9 @@ export async function performAction(
     case "accept_offer":
       await acceptOffer(user, action);
       return;
+    case "decline_counteroffer":
+      await declineCounteroffer(user, action.counterId);
+      return;
     case "cancel_offer":
       await cancelOffer(user, action.offerId);
       return;
@@ -1015,43 +1018,78 @@ async function createCounteroffer(
   }
 
   const counterId = crypto.randomUUID();
-  const statements: D1PreparedStatement[] = [
-    db
-      .prepare(
-        `INSERT INTO counteroffers
-          (id, root_offer_id, parent_counter_id, challenger_user_id,
-           proposer_user_id, recipient_user_id, maker_risk_cents, taker_risk_cents)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        counterId,
-        root.id,
-        parent?.id ?? null,
-        challengerUserId,
-        user.id,
-        recipientUserId,
-        action.makerRiskCents,
-        action.takerRiskCents,
-      ),
-  ];
+  const createStatement = parent
+    ? db
+        .prepare(
+          `INSERT INTO counteroffers
+            (id, root_offer_id, parent_counter_id, challenger_user_id,
+             proposer_user_id, recipient_user_id, maker_risk_cents,
+             taker_risk_cents)
+           SELECT ?, c.root_offer_id, c.id, c.challenger_user_id,
+                  ?, ?, ?, ?
+           FROM counteroffers c
+           JOIN offers o ON o.id = c.root_offer_id
+           WHERE c.id = ?
+             AND c.root_offer_id = ?
+             AND c.status = 'pending'
+             AND c.recipient_user_id = ?
+             AND o.status = 'open'`,
+        )
+        .bind(
+          counterId,
+          user.id,
+          recipientUserId,
+          action.makerRiskCents,
+          action.takerRiskCents,
+          parent.id,
+          root.id,
+          user.id,
+        )
+    : db
+        .prepare(
+          `INSERT INTO counteroffers
+            (id, root_offer_id, parent_counter_id, challenger_user_id,
+             proposer_user_id, recipient_user_id, maker_risk_cents,
+             taker_risk_cents)
+           SELECT ?, o.id, NULL, ?, ?, o.maker_user_id, ?, ?
+           FROM offers o
+           WHERE o.id = ?
+             AND o.status = 'open'
+             AND o.maker_user_id <> ?`,
+        )
+        .bind(
+          counterId,
+          challengerUserId,
+          user.id,
+          action.makerRiskCents,
+          action.takerRiskCents,
+          root.id,
+          user.id,
+        );
+  const statements: D1PreparedStatement[] = [createStatement];
   if (parent) {
     statements.push(
       db
         .prepare(
           `UPDATE counteroffers
            SET status = 'superseded'
-           WHERE id = ? AND status = 'pending'`,
+           WHERE id = ?
+             AND status = 'pending'
+             AND EXISTS (
+               SELECT 1 FROM counteroffers child WHERE child.id = ?
+             )`,
         )
-        .bind(parent.id),
+        .bind(parent.id, counterId),
     );
   }
   statements.push(
-    auditStatement(
+    conditionalAuditStatement(
       db,
       user.id,
       "created_counteroffer",
       "counteroffer",
       counterId,
+      "counteroffers",
       {
         offerId: root.id,
         makerRiskCents: action.makerRiskCents,
@@ -1059,7 +1097,16 @@ async function createCounteroffer(
       },
     ),
   );
-  await db.batch(statements);
+  const results = await db.batch(statements);
+  if (results[0].meta.changes !== 1) {
+    throw new AppError(
+      409,
+      parent ? "COUNTER_STALE" : "OFFER_TAKEN",
+      parent
+        ? "That counteroffer is no longer active."
+        : "This offer is no longer open.",
+    );
+  }
 }
 
 async function acceptOffer(
@@ -1146,7 +1193,18 @@ async function acceptOffer(
              taker_risk_cents, accepted_counter_id, current_revision_id)
            SELECT ?, id, maker_user_id, ?, ?, ?, ?, ?
            FROM offers
-           WHERE id = ? AND status = 'open'`,
+           WHERE id = ?
+             AND status = 'open'
+             AND (
+               ? IS NULL OR EXISTS (
+                 SELECT 1
+                 FROM counteroffers c
+                 WHERE c.id = ?
+                   AND c.root_offer_id = offers.id
+                   AND c.status = 'pending'
+                   AND c.recipient_user_id = ?
+               )
+             )`,
         )
         .bind(
           betId,
@@ -1156,6 +1214,9 @@ async function acceptOffer(
           acceptedCounterId,
           betRevisionId,
           root.id,
+          acceptedCounterId,
+          acceptedCounterId,
+          user.id,
         ),
       db
         .prepare(
@@ -1189,22 +1250,34 @@ async function acceptOffer(
                accepted_by_user_id = ?,
                accepted_counter_id = ?,
                accepted_at = CURRENT_TIMESTAMP
-           WHERE id = ? AND status = 'open'`,
+           WHERE id = ?
+             AND status = 'open'
+             AND EXISTS (
+               SELECT 1
+               FROM bets b
+               WHERE b.id = ? AND b.offer_id = offers.id
+             )`,
         )
-        .bind(takerUserId, acceptedCounterId, root.id),
+        .bind(takerUserId, acceptedCounterId, root.id, betId),
       db
         .prepare(
           `UPDATE counteroffers
            SET status = CASE WHEN id = ? THEN 'accepted' ELSE 'superseded' END
-           WHERE root_offer_id = ? AND status = 'pending'`,
+           WHERE root_offer_id = ?
+             AND status = 'pending'
+             AND EXISTS (
+               SELECT 1 FROM bets b WHERE b.id = ?
+             )`,
         )
-        .bind(acceptedCounterId ?? "", root.id),
+        .bind(acceptedCounterId ?? "", root.id, betId),
     ]);
     if (results[0].meta.changes !== 1) {
       throw new AppError(
         409,
-        "OFFER_TAKEN",
-        "Another friend got there first.",
+        action.counterId ? "COUNTER_STALE" : "OFFER_TAKEN",
+        action.counterId
+          ? "That counteroffer is no longer active."
+          : "Another friend got there first.",
       );
     }
   } catch (error) {
@@ -1227,6 +1300,66 @@ async function acceptOffer(
     offerId: root.id,
     acceptedCounterId,
   }).run();
+}
+
+async function declineCounteroffer(
+  user: AppUser,
+  counterId: string,
+): Promise<void> {
+  const db = getD1();
+  const counter = await first<CounterDetailRow>(
+    db
+      .prepare(
+        `SELECT *
+         FROM counteroffers
+         WHERE id = ?`,
+      )
+      .bind(counterId),
+  );
+  if (!counter || counter.status !== "pending") {
+    throw new AppError(
+      409,
+      "COUNTER_STALE",
+      "That counteroffer is no longer active.",
+    );
+  }
+  if (counter.recipient_user_id !== user.id) {
+    throw new AppError(
+      403,
+      "NOT_COUNTER_RECIPIENT",
+      "Only the recipient can decline these terms.",
+    );
+  }
+
+  const results = await db.batch([
+    conditionalAuditStatement(
+      db,
+      user.id,
+      "declined_counteroffer",
+      "counteroffer",
+      counter.id,
+      "counteroffers",
+      { offerId: counter.root_offer_id },
+      `status = 'pending' AND recipient_user_id = ?`,
+      [user.id],
+    ),
+    db
+      .prepare(
+        `UPDATE counteroffers
+         SET status = 'superseded'
+         WHERE id = ?
+           AND status = 'pending'
+           AND recipient_user_id = ?`,
+      )
+      .bind(counter.id, user.id),
+  ]);
+  if (results[1].meta.changes !== 1) {
+    throw new AppError(
+      409,
+      "COUNTER_STALE",
+      "That counteroffer is no longer active.",
+    );
+  }
 }
 
 async function cancelOffer(user: AppUser, offerId: string): Promise<void> {
@@ -2238,6 +2371,37 @@ function auditStatement(
       entityType,
       entityId,
       JSON.stringify(metadata),
+    );
+}
+
+function conditionalAuditStatement(
+  db: D1Database,
+  actorUserId: string,
+  action: string,
+  entityType: string,
+  entityId: string,
+  entityTable: "counteroffers",
+  metadata: Record<string, unknown> = {},
+  extraPredicate = "1 = 1",
+  extraBindings: unknown[] = [],
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO audit_events
+        (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+       SELECT ?, ?, ?, ?, ?, ?
+       FROM ${entityTable}
+       WHERE id = ? AND ${extraPredicate}`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      actorUserId,
+      action,
+      entityType,
+      entityId,
+      JSON.stringify(metadata),
+      entityId,
+      ...extraBindings,
     );
 }
 

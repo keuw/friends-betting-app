@@ -13,6 +13,9 @@ external method, both parties confirm the settlement in Sidebet.
 
 - One root offer creates at most one matched bet. Accepting it atomically closes
   the whole offer and supersedes every competing counteroffer.
+- The current recipient may decline a pending counteroffer without closing the
+  root offer. Declined terms are terminal and cannot later be accepted or used
+  as the parent of another counteroffer.
 - Creating or countering an offer does not reserve funds. Sidebet has no wallet,
   deposit, balance, or credit limit.
 - An offer can contain one market or multiple legs. Every leg must win for a

@@ -815,9 +815,26 @@ function CounterRow({
           </button>
           <button
             type="button"
+            disabled={busy !== null}
             onClick={() => setCountering((current) => !current)}
           >
             Counter
+          </button>
+          <button
+            type="button"
+            className="button-quiet danger"
+            disabled={busy !== null}
+            onClick={() =>
+              void onAction(
+                {
+                  type: "decline_counteroffer",
+                  counterId: counter.id,
+                },
+                "Counter declined. The original offer stays open.",
+              )
+            }
+          >
+            Decline
           </button>
         </div>
       )}

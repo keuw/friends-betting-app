@@ -213,6 +213,11 @@ export type AcceptOfferAction = {
   counterId?: string;
 };
 
+export type DeclineCounterofferAction = {
+  type: "decline_counteroffer";
+  counterId: string;
+};
+
 export type CancelOfferAction = {
   type: "cancel_offer";
   offerId: string;
@@ -267,6 +272,7 @@ export type AppAction =
   | CreateOfferAction
   | CreateCounterofferAction
   | AcceptOfferAction
+  | DeclineCounterofferAction
   | CancelOfferAction
   | ResolveMarketAction
   | ProposeBetRevisionAction

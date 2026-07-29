@@ -40,6 +40,9 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - One root offer can create at most one matched bet.
 - Offers and counteroffers never reserve funds.
 - Accepting any branch consumes the root offer.
+- Only the current recipient may accept, counter, or decline a pending
+  counteroffer. Those transitions must recheck the pending state atomically so
+  exactly one wins; declining leaves the root offer open.
 - Market creators may participate in offers on markets they resolve; both the
   participation and resolution stay visible in the public activity ledger.
 - Market and matched-bet terms are append-only. Never update a revision in
