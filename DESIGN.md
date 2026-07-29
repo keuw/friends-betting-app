@@ -61,13 +61,13 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
 - Public ledgers pair free-text search with pressed-state status filters, keep
   filtered and total counts visible, and offer a one-action reset when no
   records match.
-- The matched-bet ledger opens on `Current`: pending and resolved bets remain
-  visible while mutually voided history is hidden until requested. Pending,
-  Resolved, Voided, and All remain explicit counted filters.
+- The matched-bet ledger opens on `Pending`, showing every unresolved bet
+  across the friend group. Resolved and Voided history remain explicit counted
+  filters, while All restores the complete ledger.
 - The `My live bets` score-strip metric is a compact drill-down action, not a
   static KPI. It opens the matched-bet ledger on the counted `My live` filter:
   only pending bets where the viewer is a participant. The normal Matched bets
-  destination always returns to `Current`, and the other two score metrics stay
+  destination always returns to `Pending`, and the other two score metrics stay
   noninteractive.
 - Maker-won and taker-won are both user-facing Resolved bets while each card
   retains its exact winner badge. Offline pair-balance payments are not

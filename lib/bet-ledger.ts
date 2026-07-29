@@ -1,9 +1,9 @@
 import type { BetStatus } from "./contracts";
 
 export type BetLifecycle = "pending" | "resolved" | "void";
-export type BetLedgerFilter = BetLifecycle | "mine" | "current" | "all";
+export type BetLedgerFilter = BetLifecycle | "mine" | "all";
 
-export const DEFAULT_BET_LEDGER_FILTER: BetLedgerFilter = "current";
+export const DEFAULT_BET_LEDGER_FILTER: BetLedgerFilter = "pending";
 
 export function shouldShowFirstUseBetLedgerEmpty(
   totalBetCount: number,
@@ -33,9 +33,7 @@ export function filterMatchedBets<
 
   return bets.filter((bet) => {
     const lifecycle = getBetLifecycle(bet.status);
-    return statusFilter === "current"
-      ? lifecycle !== "void"
-      : lifecycle === statusFilter;
+    return lifecycle === statusFilter;
   });
 }
 
@@ -54,7 +52,6 @@ export function countMatchedBets(
 
   return {
     mine: filterMatchedBets(bets, "mine").length,
-    current: counts.pending + counts.resolved,
     ...counts,
     all: bets.length,
   };

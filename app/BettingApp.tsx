@@ -62,12 +62,18 @@ const BET_STATUS_FILTERS: {
   label: string;
 }[] = [
   { value: "mine", label: "My live" },
-  { value: "current", label: "Current" },
   { value: "pending", label: "Pending" },
   { value: "resolved", label: "Resolved" },
   { value: "void", label: "Voided" },
   { value: "all", label: "All" },
 ];
+const BET_FILTER_DESCRIPTIONS: Record<BetLedgerFilter, string> = {
+  mine: "Your unresolved matched bets",
+  pending: "All unresolved matched bets",
+  resolved: "Finished bets with a recorded winner",
+  void: "Mutually voided bet history",
+  all: "Complete matched-bet history",
+};
 
 export function BettingApp({
   viewer,
@@ -1130,7 +1136,7 @@ function BetsTab({
   );
   const selectedFilterLabel =
     BET_STATUS_FILTERS.find((filter) => filter.value === statusFilter)?.label ??
-    "Current";
+    "Pending";
 
   return (
     <section className="single-column">
@@ -1152,11 +1158,7 @@ function BetsTab({
             <div className="bet-ledger-tools-head">
               <div>
                 <strong>Filter matched bets</strong>
-                <span>
-                  {statusFilter === "mine"
-                    ? "Your unresolved matched bets"
-                    : "Pending + resolved · voided hidden"}
-                </span>
+                <span>{BET_FILTER_DESCRIPTIONS[statusFilter]}</span>
               </div>
               <span aria-live="polite">
                 Showing {filteredBets.length} of {state.bets.length} matched bets

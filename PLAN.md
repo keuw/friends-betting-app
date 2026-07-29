@@ -2054,10 +2054,10 @@ Implementation:
 
 - [x] Add failing helper and production-bundle regressions for the Pending
   default and absence of Current.
-- [ ] Remove Current semantics from the typed helper and counts.
-- [ ] Remove the Current control and make filter descriptions specific to the
+- [x] Remove Current semantics from the typed helper and counts.
+- [x] Remove the Current control and make filter descriptions specific to the
   selected scope.
-- [ ] Update `DESIGN.md` to make Pending the normal ledger destination.
+- [x] Update `DESIGN.md` to make Pending the normal ledger destination.
 - [ ] Run the full unit, built integration, lint, type, schema, and build gates;
   confirm no migration.
 - [ ] Commit and push the verified source, deploy a saved Sites version, and
