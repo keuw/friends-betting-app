@@ -1481,7 +1481,7 @@ Implementation:
 - [x] Exercise separate creator, non-creator, and observer identities against
   open-offer, cancelled-offer, expired-offer, matched-bet, and multi-market
   parlay cases in the production-style D1 runtime.
-- [/] Commit and push the exact verified source, deploy a saved Sites version,
+- [x] Commit and push the exact verified source, deploy a saved Sites version,
   and verify the new cleanup boundary on the live app without changing matched
   bets or the Notion archive.
 
@@ -1592,7 +1592,7 @@ Implementation:
   migration and no regression to server deadline enforcement.
 - [x] Exercise future-open, past-unresolved, resolved, and void markets in the
   production-style D1 runtime and confirm filter counts and offer rejection.
-- [/] Commit and push the exact verified source, deploy a saved Sites version,
+- [x] Commit and push the exact verified source, deploy a saved Sites version,
   and verify the year-bearing dates and all five filters on the live app.
 
 Acceptance:
