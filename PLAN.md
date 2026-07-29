@@ -2058,7 +2058,7 @@ Implementation:
 - [x] Remove the Current control and make filter descriptions specific to the
   selected scope.
 - [x] Update `DESIGN.md` to make Pending the normal ledger destination.
-- [ ] Run the full unit, built integration, lint, type, schema, and build gates;
+- [x] Run the full unit, built integration, lint, type, schema, and build gates;
   confirm no migration.
 - [ ] Commit and push the verified source, deploy a saved Sites version, and
   verify the production bundle exposes the simplified filters.
