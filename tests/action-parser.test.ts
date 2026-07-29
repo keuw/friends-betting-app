@@ -29,6 +29,39 @@ test("parses market edits against an explicit base revision", () => {
   );
 });
 
+test("parses creator requests to reopen an exact closed market revision", () => {
+  assert.deepEqual(
+    parseAppAction({
+      type: "reopen_market",
+      marketId: "market-1",
+      baseRevisionId: "market-revision-2",
+      closesAt: "2030-02-01T00:00:00.000Z",
+      changeNote: "The event was postponed to next month",
+    }),
+    {
+      type: "reopen_market",
+      marketId: "market-1",
+      baseRevisionId: "market-revision-2",
+      closesAt: "2030-02-01T00:00:00.000Z",
+      changeNote: "The event was postponed to next month",
+    },
+  );
+
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "reopen_market",
+        marketId: "market-1",
+        closesAt: "2030-02-01T00:00:00.000Z",
+        changeNote: "The event was postponed",
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === "INVALID_FIELD" &&
+      error.message === "baseRevisionId is required.",
+  );
+});
+
 test("requires exact market revisions for resolution and revised legs", () => {
   assert.throws(
     () =>

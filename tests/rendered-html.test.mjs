@@ -228,6 +228,26 @@ test("matched bets default to Pending and expose unambiguous status filters", as
   assert.match(clientStyles, /\.bet-ledger-empty/);
 });
 
+test("market creators can extend open deadlines and reopen closed markets safely", async () => {
+  const [serverBundle, clientBundle, clientStyles, migrations] =
+    await Promise.all([
+      readFile(new URL("dist/server/index.js", root), "utf8"),
+      readClientBundle(),
+      readClientStyles(),
+      readMigrations(),
+    ]);
+
+  assert.match(serverBundle, /reopen_market/);
+  assert.match(serverBundle, /DEADLINE_CANNOT_SHORTEN/);
+  assert.match(clientBundle, /Reopen market/);
+  assert.match(clientBundle, /Expired offers stay expired/);
+  assert.match(clientBundle, /Deadline extensions update .* open offer/);
+  assert.match(clientBundle, /Originally posted under market v/);
+  assert.match(clientStyles, /\.market-reopen-panel/);
+  assert.match(clientStyles, /\.offer-deadline-extension/);
+  assert.match(migrations, /original_market_revision_id/);
+});
+
 test("the score strip opens the signed-in user's live matched bets", async () => {
   const [clientBundle, clientStyles] = await Promise.all([
     readClientBundle(),

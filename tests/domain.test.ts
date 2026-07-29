@@ -5,6 +5,8 @@ import {
   canAmendBet,
   derivePairBalances,
   gradeParlay,
+  isDeadlineOnlyMarketExtension,
+  isMarketDeadlineShortened,
   isValidMoneyTerm,
   type DebtEntry,
   type OfflineSettlementEntry,
@@ -28,6 +30,50 @@ test("rejects invalid money terms", () => {
   assert.equal(isValidMoneyTerm(-1), false);
   assert.equal(isValidMoneyTerm(1.5), false);
   assert.equal(isValidMoneyTerm(Number.MAX_SAFE_INTEGER + 1), false);
+});
+
+test("classifies auditable market deadline extensions without term drift", () => {
+  const current = {
+    question: "Will the game happen?",
+    description: "Official league result",
+    selectionA: "Yes",
+    selectionB: "No",
+    closesAt: "2030-01-01T00:00:00.000Z",
+  };
+
+  assert.equal(
+    isDeadlineOnlyMarketExtension(current, {
+      ...current,
+      closesAt: "2030-02-01T00:00:00.000Z",
+    }),
+    true,
+  );
+  assert.equal(
+    isDeadlineOnlyMarketExtension(current, {
+      ...current,
+      question: "Will the rescheduled game happen?",
+      closesAt: "2030-02-01T00:00:00.000Z",
+    }),
+    false,
+  );
+  assert.equal(
+    isDeadlineOnlyMarketExtension(current, current),
+    false,
+  );
+  assert.equal(
+    isMarketDeadlineShortened(current, {
+      ...current,
+      closesAt: "2029-12-01T00:00:00.000Z",
+    }),
+    true,
+  );
+  assert.equal(
+    isMarketDeadlineShortened(current, {
+      ...current,
+      closesAt: current.closesAt,
+    }),
+    false,
+  );
 });
 
 test("grades parlays from the maker proposition", () => {
