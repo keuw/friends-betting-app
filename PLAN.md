@@ -2073,6 +2073,118 @@ Acceptance:
   complete ledger.
 - No stored data or server behavior changes.
 
+### Phase 22 — Extend open markets and reopen closed markets
+
+Let a market creator move an unresolved market's betting deadline later without
+rewriting accepted agreements or silently reviving expired offers.
+
+Lifecycle and authorization contract:
+
+- Only the market creator may extend or reopen it. Every action rechecks
+  creator ownership, the exact current `baseRevisionId`, current status, and
+  deadline on the server.
+- Resolved and voided markets remain final and cannot be reopened.
+- An open market continues to use the existing `Edit market` form. Its deadline
+  may remain unchanged or move later, but it may never be shortened.
+- A `Closed · awaiting result` market exposes a separate `Reopen market`
+  panel. Reopening is deadline-only: the question, context, and Side A/Side B
+  labels are copied exactly from the closed revision.
+- Reopening requires a new future date and a bounded audit reason. Repeated
+  extensions and reopenings are allowed, with each successful action creating
+  a numbered market revision instead of mutating a prior revision.
+- Reopening changes the derived lifecycle back to `Open for offers`; it never
+  records a result, changes a debt, or settles a matched bet.
+
+Open-offer propagation contract:
+
+- When an open-market edit changes only the deadline and moves it later, every
+  root offer that is still genuinely open automatically adopts the new market
+  revision and deadline. Pending counteroffers remain attached to that root
+  offer.
+- A multi-leg offer recomputes `expiresAt` from the earliest effective close
+  among all of its legs after an extension.
+- If the edit also changes the question, context, or either outcome label,
+  existing offers keep their original market revision and deadline. Only new
+  offers use the edited terms.
+- Each offer leg retains its original market-revision attribution even when its
+  effective revision advances through deadline-only extensions. Offer cards
+  and public history make the original and extended versions distinguishable.
+- Expired or cancelled offers are never revived. Accepted offers and every
+  matched-bet revision remain pinned to the exact revision they accepted.
+- Reopening an already-closed market affects new offers only because any prior
+  unmatched offers have already expired.
+
+Atomicity and race contract:
+
+- The new revision, current-market pointer, eligible open-offer leg updates,
+  recomputed offer expirations, and audit receipt commit atomically.
+- Deadline-only propagation must recheck that each affected root offer is still
+  open and has no already-closed leg. It may not revive a stale parlay by
+  extending only one of its legs.
+- An accept-versus-extension race has two valid serial outcomes: acceptance
+  first locks the old revision into the matched bet, or extension first moves
+  the still-open offer and acceptance locks the new revision. No offer or bet
+  may contain a partial mixture caused by the race.
+- Concurrent edits or reopen requests use the existing optimistic revision
+  guard so exactly one creates the next revision and stale attempts receive a
+  structured conflict.
+
+Interface contract:
+
+- Open markets retain `Edit market`; its deadline input and helper copy explain
+  that the date can stay the same or move later, never earlier.
+- Closed unresolved markets created by the viewer show `Reopen market` beside
+  resolution and history controls.
+- The reopen panel shows the previous close time, accepts a new future local
+  date/time and required reason, and warns that expired offers stay expired
+  while new offers may be posted after reopening.
+- Deadline-only edits warn how many currently open offers will be extended.
+  Mixed term edits explain that existing offers will retain their prior
+  revision instead.
+- Success, stale-state, unauthorized, invalid-date, loading, disabled, and
+  responsive states follow the existing market editor patterns.
+
+Implementation:
+
+- [ ] Add failing parser, domain, rendered-bundle, and production D1 tests for
+  creator-only reopen actions, later-only deadline edits, and final
+  resolved/void markets.
+- [ ] Preserve each offer leg's original market revision across automatic
+  deadline extensions, including a safe migration/backfill for existing legs.
+- [ ] Add a typed `reopen_market` action with bounded inputs and implement the
+  deadline-only append-only revision transition with optimistic concurrency.
+- [ ] Extend `edit_market` so unchanged-or-later deadlines remain valid and
+  pure deadline extensions atomically advance only eligible open offer legs
+  while recomputing root-offer expiration.
+- [ ] Prove mixed term edits, expired/cancelled offers, accepted offers,
+  matched bets, and parlays keep their required frozen history.
+- [ ] Add the closed-market reopen panel, open-editor deadline guidance,
+  affected-offer warnings, and original-versus-extended offer copy.
+- [ ] Update `README.md`, `CONTRIBUTING.md`, and `DESIGN.md` with the narrow
+  exception that only open, deadline-only edits may advance an existing open
+  offer while preserving its original revision attribution.
+- [ ] Run unit, full built/D1 integration, lint, type, migration generation,
+  and production build gates; inspect the generated migration and test the
+  accept-versus-extension and concurrent-reopen races.
+- [ ] Commit and push the verified source, save and deploy a Sites version, and
+  verify the live bundle and production endpoint.
+
+Acceptance:
+
+- A creator can extend an open market from `Edit market` or reopen their closed
+  unresolved market from a focused panel.
+- No creator can shorten a deadline, reopen a resolved/void market, or change
+  closed market terms while reopening.
+- Deadline-only extensions keep still-open offers available until the new
+  effective deadline and preserve a public trail back to each original offer
+  revision.
+- Term-changing edits do not alter existing offers. Reopening does not revive
+  expired offers. Neither flow changes an accepted or matched bet.
+- Multi-leg offer expiration remains the earliest live leg close after any
+  eligible extension.
+- Stale and concurrent requests cannot partially update a market, offer,
+  counteroffer, parlay, or matched bet.
+
 ## Required verification
 
 ```text
