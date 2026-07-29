@@ -121,6 +121,7 @@ zero created or updated records.
 - Mutual-void requests are preserved in `Void History` whether accepted,
   rejected, cancelled, or superseded. Agreement voids a pending bet without
   deleting its terms or creating debt.
-- Permanent market deletion is outside this archive and is allowed only when
-  no offer or matched-bet reference exists, so it cannot remove or invalidate
-  an archived matched bet.
+- Permanent market deletion is outside this archive. Open offers and every
+  matched-bet reference block deletion, so an archived bet cannot be removed or
+  invalidated. Cancelled or expired unmatched offers may be removed with their
+  market because they never enter this matched-bet archive.

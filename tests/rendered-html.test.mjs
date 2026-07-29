@@ -107,10 +107,11 @@ test("All markets can be searched, filtered, and keeps its ledger order", async 
   assert.match(clientBundle, /Open for offers/);
   assert.match(clientBundle, /Closed · awaiting result/);
   assert.match(clientBundle, /Betting closed/);
+  assert.match(clientBundle, /selected market is now closed/);
   assert.match(clientBundle, /Voided/);
   assert.match(clientBundle, /No matching markets/);
   assert.match(clientBundle, /Clear search and filters/);
-  assert.match(clientBundle, /year:"numeric"/);
+  assert.match(clientBundle, /year:[`"']numeric[`"']/);
   assert.match(
     serverBundle,
     /CASE m\.status WHEN 'open' THEN 0 WHEN 'resolved' THEN 1 ELSE 2 END/,
@@ -198,7 +199,7 @@ test("mutual matched-bet voids preserve public history and require agreement", a
   assert.match(clientBundle, /Requests and responses stay public/);
 });
 
-test("market creators receive a guarded permanent-delete flow for unused markets", async () => {
+test("market creators receive a guarded permanent-delete flow with inactive-offer cleanup", async () => {
   const [serverBundle, clientBundle, migrations] = await Promise.all([
     readFile(new URL("dist/server/index.js", root), "utf8"),
     readClientBundle(),
@@ -208,12 +209,14 @@ test("market creators receive a guarded permanent-delete flow for unused markets
   assert.match(migrations, /bet_revision_legs_market_idx/);
   assert.match(serverBundle, /delete_market/);
   assert.match(serverBundle, /deleted_market/);
+  assert.match(serverBundle, /deleted_inactive_offer/);
   assert.match(serverBundle, /NOT_MARKET_CREATOR/);
   assert.match(serverBundle, /MARKET_IN_USE/);
-  assert.match(clientBundle, /Delete unused market/);
+  assert.match(clientBundle, /Delete market/);
   assert.match(clientBundle, /PERMANENT DELETE/);
   assert.match(clientBundle, /Permanently delete/);
-  assert.match(clientBundle, /A minimal deletion receipt remains/);
+  assert.match(clientBundle, /Audit receipts remain/);
+  assert.match(clientBundle, /Complete inactive parlays/);
   assert.match(clientBundle, /Cannot delete:/);
 });
 

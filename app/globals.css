@@ -748,6 +748,16 @@ button.brand-lockup {
   padding: 0.65rem 1.25rem;
 }
 
+.selected-slip-warning {
+  margin: 0;
+  padding: 0.65rem 1.25rem;
+  border-top: 1px solid rgba(20, 32, 24, 0.14);
+  background: #fff0cd;
+  color: var(--ink);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
 .selected-slip-leg {
   display: grid;
   align-items: center;
@@ -1565,6 +1575,10 @@ button.brand-lockup {
   background: var(--acid);
 }
 
+.status-closed {
+  background: #ffe29a;
+}
+
 .status-resolved,
 .status-maker-won,
 .status-taker-won,
@@ -2372,6 +2386,13 @@ button.brand-lockup {
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.45;
+}
+
+.market-row > .market-lifecycle-note {
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid #d49a24;
+  background: #fff6d8;
+  color: var(--ink);
 }
 
 .market-sides {

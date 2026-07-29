@@ -14,7 +14,6 @@ import type {
   BetView,
   CounterofferView,
   MarketRevisionView,
-  MarketStatus,
   MarketView,
   OfferView,
   PairBalanceView,
@@ -24,7 +23,9 @@ import type {
 import { americanOdds } from "@/lib/domain";
 import {
   filterAndSortMarkets,
+  getMarketLifecycle,
   type MarketLedgerFilter,
+  type MarketLifecycle,
 } from "@/lib/market-ledger";
 
 type Tab = "board" | "bets" | "settle" | "markets";
@@ -36,7 +37,8 @@ const MARKET_STATUS_FILTERS: {
   label: string;
 }[] = [
   { value: "all", label: "All" },
-  { value: "open", label: "Open" },
+  { value: "open", label: "Open for offers" },
+  { value: "closed", label: "Closed · awaiting result" },
   { value: "resolved", label: "Resolved" },
   { value: "void", label: "Voided" },
 ];
@@ -381,8 +383,9 @@ function OfferComposer({
       | ((current: Record<string, Selection>) => Record<string, Selection>),
   ) => void;
 }) {
+  const nowMs = useClockTick();
   const availableMarkets = markets
-    .filter((market) => market.status === "open")
+    .filter((market) => getMarketLifecycle(market, nowMs) === "open")
     .sort(
       (left, right) =>
         new Date(left.closesAt).getTime() -
@@ -403,6 +406,9 @@ function OfferComposer({
         new Date(left.closesAt).getTime() -
         new Date(right.closesAt).getTime(),
     );
+  const hasUnavailableSelection = selectedMarkets.some(
+    (market) => getMarketLifecycle(market, nowMs) !== "open",
+  );
   const normalizedQuery = marketQuery.trim().toLocaleLowerCase();
   const matchingMarkets = availableMarkets.filter((market) => {
     if (!normalizedQuery) return true;
@@ -452,7 +458,14 @@ function OfferComposer({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (selectedCount === 0 || makerRiskCents < 1 || takerRiskCents < 1) return;
+    if (
+      selectedCount === 0 ||
+      hasUnavailableSelection ||
+      makerRiskCents < 1 ||
+      takerRiskCents < 1
+    ) {
+      return;
+    }
     await onAction(
       {
         type: "create_offer",
@@ -483,7 +496,7 @@ function OfferComposer({
       </div>
       <h2>What are you willing to put your name on?</h2>
 
-      {availableMarkets.length === 0 ? (
+      {availableMarkets.length === 0 && selectedMarkets.length === 0 ? (
         <div className="composer-empty">
           <span>NO ELIGIBLE MARKETS</span>
           <p>
@@ -531,6 +544,12 @@ function OfferComposer({
                   );
                 })}
               </div>
+              {hasUnavailableSelection && (
+                <p className="selected-slip-warning">
+                  A selected market is now closed to new offers. Remove it
+                  before posting.
+                </p>
+              )}
             </section>
           )}
 
@@ -686,6 +705,7 @@ function OfferComposer({
             disabled={
               busy !== null ||
               selectedCount === 0 ||
+              hasUnavailableSelection ||
               makerRiskCents < 1 ||
               takerRiskCents < 1
             }
@@ -2015,6 +2035,7 @@ function MarketsTab({
   onAction: (action: AppAction, message: string) => Promise<void>;
   onCreateOffer: (marketId: string, selection: Selection) => void;
 }) {
+  const nowMs = useClockTick();
   const [question, setQuestion] = useState("");
   const [description, setDescription] = useState("");
   const [selectionA, setSelectionA] = useState("Yes");
@@ -2028,13 +2049,20 @@ function MarketsTab({
     state.markets,
     marketQuery,
     statusFilter,
+    nowMs,
   );
-  const statusCounts: Record<MarketStatus | "all", number> = {
+  const lifecycleCounts: Record<MarketLifecycle, number> = {
+    open: 0,
+    closed: 0,
+    resolved: 0,
+    void: 0,
+  };
+  for (const market of state.markets) {
+    lifecycleCounts[getMarketLifecycle(market, nowMs)] += 1;
+  }
+  const statusCounts: Record<MarketLedgerFilter, number> = {
     all: state.markets.length,
-    open: state.markets.filter((market) => market.status === "open").length,
-    resolved: state.markets.filter((market) => market.status === "resolved")
-      .length,
-    void: state.markets.filter((market) => market.status === "void").length,
+    ...lifecycleCounts,
   };
   const hasActiveLedgerFilters =
     normalizedQuery.length > 0 || statusFilter !== "all";
@@ -2206,6 +2234,7 @@ function MarketsTab({
                   <MarketCard
                     key={market.id}
                     market={market}
+                    nowMs={nowMs}
                     busy={busy}
                     onAction={onAction}
                     onCreateOffer={onCreateOffer}
@@ -2222,36 +2251,42 @@ function MarketsTab({
 
 function MarketCard({
   market,
+  nowMs,
   busy,
   onAction,
   onCreateOffer,
 }: {
   market: MarketView;
+  nowMs: number;
   busy: string | null;
   onAction: (action: AppAction, message: string) => Promise<void>;
   onCreateOffer: (marketId: string, selection: Selection) => void;
 }) {
-  const [renderedAt] = useState(Date.now);
   const [editing, setEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const currentRevision =
     market.revisions.find((revision) => revision.isCurrent) ??
     market.revisions[0];
+  const lifecycle = getMarketLifecycle(market, nowMs);
   const canEdit =
     market.createdByMe &&
-    market.status === "open" &&
-    new Date(market.closesAt).getTime() > renderedAt;
+    lifecycle === "open";
 
   return (
     <article className="market-row">
       <div className="market-state">
-        <StatusBadge status={market.status} />
+        <MarketLifecycleBadge lifecycle={lifecycle} />
         <span className="revision-tag">Market v{market.revisionNumber}</span>
         <span>by {market.creatorName}</span>
       </div>
       <h3>{market.question}</h3>
       {market.description && <p>{market.description}</p>}
+      {lifecycle === "closed" && (
+        <p className="market-lifecycle-note">
+          Betting is closed. This market is awaiting a result from its creator.
+        </p>
+      )}
       <div className="market-sides">
         <span className={market.winningSelection === "a" ? "winner" : ""}>
           A · {market.selectionA}
@@ -2261,7 +2296,7 @@ function MarketCard({
         </span>
       </div>
 
-      {market.status === "open" && (
+      {lifecycle === "open" && (
         <div className="market-offer-actions">
           <span>Put your name on it</span>
           <button
@@ -2292,7 +2327,10 @@ function MarketCard({
       )}
 
       <div className="market-row-footer">
-        <span>Closes {dateTime(market.closesAt)}</span>
+        <span>
+          {lifecycle === "closed" ? "Betting closed" : "Closes"}{" "}
+          {dateTime(market.closesAt)}
+        </span>
         <div className="market-row-controls">
           {canEdit && (
             <button
@@ -2320,7 +2358,7 @@ function MarketCard({
               aria-expanded={deleteArmed}
               onClick={() => setDeleteArmed((current) => !current)}
             >
-              {deleteArmed ? "Close delete panel" : "Delete unused market"}
+              {deleteArmed ? "Close delete panel" : "Delete market"}
             </button>
           )}
         </div>
@@ -2340,8 +2378,12 @@ function MarketCard({
           </div>
           <p>
             This removes all {market.revisions.length} market revision
-            {market.revisions.length === 1 ? "" : "s"}. A minimal deletion
-            receipt remains in activity history.
+            {market.revisions.length === 1 ? "" : "s"}
+            {market.removableOfferReferenceCount > 0
+              ? ` and ${market.removableOfferReferenceCount} cancelled or expired offer${market.removableOfferReferenceCount === 1 ? "" : "s"}`
+              : ""}
+            . Complete inactive parlays and their counteroffer threads are
+            removed together. Audit receipts remain in activity history.
           </p>
           <div>
             <button
@@ -2354,7 +2396,7 @@ function MarketCard({
                     type: "delete_market",
                     marketId: market.id,
                   },
-                  "Unused market and its revisions permanently deleted.",
+                  "Market and inactive offer history permanently deleted.",
                 )
               }
             >
@@ -2782,6 +2824,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function MarketLifecycleBadge({
+  lifecycle,
+}: {
+  lifecycle: MarketLifecycle;
+}) {
+  const label = {
+    open: "Open for offers",
+    closed: "Closed · awaiting result",
+    resolved: "Resolved",
+    void: "Voided",
+  }[lifecycle];
+  return (
+    <span className={`status-badge status-${lifecycle}`}>
+      {label}
+    </span>
+  );
+}
+
 function EmptyCard({
   label,
   title,
@@ -2892,9 +2952,23 @@ function dateTime(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(timestampDate(value));
+}
+
+function useClockTick(): number {
+  const [nowMs, setNowMs] = useState(Date.now);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  return nowMs;
 }
 
 function relativeTime(value: string): string {

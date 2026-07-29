@@ -47,6 +47,8 @@ type MarketRow = {
   current_revision_id: string;
   revision_number: number;
   offer_reference_count: number;
+  active_offer_reference_count: number;
+  removable_offer_reference_count: number;
   bet_reference_count: number;
   created_at: string;
 };
@@ -305,6 +307,23 @@ export async function getAppState(user: AppUser): Promise<AppState> {
                 WHERE ol.market_id = m.id
               ) AS offer_reference_count,
               (
+                SELECT COUNT(DISTINCT ol.offer_id)
+                FROM offer_legs ol
+                JOIN offers o ON o.id = ol.offer_id
+                WHERE ol.market_id = m.id
+                  AND o.status = 'open'
+              ) AS active_offer_reference_count,
+              (
+                SELECT COUNT(DISTINCT ol.offer_id)
+                FROM offer_legs ol
+                JOIN offers o ON o.id = ol.offer_id
+                WHERE ol.market_id = m.id
+                  AND o.status IN ('cancelled', 'expired')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM bets b WHERE b.offer_id = o.id
+                  )
+              ) AS removable_offer_reference_count,
+              (
                 SELECT COUNT(DISTINCT br.bet_id)
                 FROM bet_revision_legs brl
                 JOIN bet_revisions br ON br.id = brl.bet_revision_id
@@ -470,17 +489,20 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     viewer: { id: user.id, displayName: user.displayName },
     markets: marketRows.map((market) => {
       const createdByMe = market.creator_user_id === user.id;
+      const protectedOfferReferenceCount =
+        market.offer_reference_count -
+        market.removable_offer_reference_count;
       const canDelete =
         createdByMe &&
-        market.offer_reference_count === 0 &&
+        protectedOfferReferenceCount === 0 &&
         market.bet_reference_count === 0;
       const deletionBlocker = !createdByMe
         ? null
-        : market.offer_reference_count > 0 &&
+        : protectedOfferReferenceCount > 0 &&
             market.bet_reference_count > 0
-          ? `Referenced by ${market.offer_reference_count} offer(s) and ${market.bet_reference_count} matched bet(s).`
-          : market.offer_reference_count > 0
-            ? `Referenced by ${market.offer_reference_count} offer(s), including cancelled or expired offers.`
+          ? `Referenced by ${protectedOfferReferenceCount} active or protected offer(s) and ${market.bet_reference_count} matched bet(s).`
+          : protectedOfferReferenceCount > 0
+            ? `Referenced by ${protectedOfferReferenceCount} active or protected offer(s).`
             : market.bet_reference_count > 0
               ? `Referenced by ${market.bet_reference_count} matched bet(s).`
               : null;
@@ -499,6 +521,9 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         currentRevisionId: market.current_revision_id,
         revisionNumber: market.revision_number,
         offerReferenceCount: market.offer_reference_count,
+        activeOfferReferenceCount: market.active_offer_reference_count,
+        removableOfferReferenceCount:
+          market.removable_offer_reference_count,
         betReferenceCount: market.bet_reference_count,
         canDelete,
         deletionBlocker,
@@ -993,6 +1018,7 @@ async function deleteMarket(
     id: string;
     creator_user_id: string;
     offer_reference_count: number;
+    removable_offer_reference_count: number;
     bet_reference_count: number;
   }>(
     db
@@ -1003,6 +1029,16 @@ async function deleteMarket(
                   FROM offer_legs ol
                   WHERE ol.market_id = m.id
                 ) AS offer_reference_count,
+                (
+                  SELECT COUNT(DISTINCT ol.offer_id)
+                  FROM offer_legs ol
+                  JOIN offers o ON o.id = ol.offer_id
+                  WHERE ol.market_id = m.id
+                    AND o.status IN ('cancelled', 'expired')
+                    AND NOT EXISTS (
+                      SELECT 1 FROM bets b WHERE b.offer_id = o.id
+                    )
+                ) AS removable_offer_reference_count,
                 (
                   SELECT COUNT(DISTINCT br.bet_id)
                   FROM bet_revision_legs brl
@@ -1025,17 +1061,18 @@ async function deleteMarket(
     );
   }
   if (
-    market.offer_reference_count > 0 ||
+    market.offer_reference_count !==
+      market.removable_offer_reference_count ||
     market.bet_reference_count > 0
   ) {
     throw new AppError(
       409,
       "MARKET_IN_USE",
-      "This market has offer or matched-bet history and cannot be deleted.",
+      "This market has an active offer or matched-bet history and cannot be deleted.",
     );
   }
 
-  const auditId = crypto.randomUUID();
+  const deletionOperationId = crypto.randomUUID();
   const results = await db.batch([
     db
       .prepare(
@@ -1044,17 +1081,37 @@ async function deleteMarket(
          SELECT ?, ?, 'deleted_market', 'market', m.id,
                 json_object(
                   'question', m.question,
+                  'deletionOperationId', ?,
                   'revisionCount', (
                     SELECT COUNT(*)
                     FROM market_revisions mr
                     WHERE mr.market_id = m.id
+                  ),
+                  'removedInactiveOfferCount', (
+                    SELECT COUNT(DISTINCT ol.offer_id)
+                    FROM offer_legs ol
+                    JOIN offers o ON o.id = ol.offer_id
+                    WHERE ol.market_id = m.id
+                      AND o.status IN ('cancelled', 'expired')
+                      AND NOT EXISTS (
+                        SELECT 1 FROM bets b WHERE b.offer_id = o.id
+                      )
                   )
                 )
          FROM markets m
          WHERE m.id = ?
            AND m.creator_user_id = ?
            AND NOT EXISTS (
-             SELECT 1 FROM offer_legs ol WHERE ol.market_id = m.id
+             SELECT 1
+             FROM offer_legs ol
+             JOIN offers o ON o.id = ol.offer_id
+             WHERE ol.market_id = m.id
+               AND (
+                 o.status NOT IN ('cancelled', 'expired')
+                 OR EXISTS (
+                   SELECT 1 FROM bets b WHERE b.offer_id = o.id
+                 )
+               )
            )
            AND NOT EXISTS (
              SELECT 1
@@ -1062,16 +1119,127 @@ async function deleteMarket(
              WHERE brl.market_id = m.id
            )`,
       )
-      .bind(auditId, user.id, marketId, user.id),
+      .bind(
+        deletionOperationId,
+        user.id,
+        deletionOperationId,
+        marketId,
+        user.id,
+      ),
+    db
+      .prepare(
+        `INSERT INTO audit_events
+          (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+         SELECT ? || ':' || o.id, ?, 'deleted_inactive_offer', 'offer', o.id,
+                json_object(
+                  'deletionOperationId', ?,
+                  'triggeringMarketId', ?,
+                  'status', o.status,
+                  'makerRiskCents', o.maker_risk_cents,
+                  'takerRiskCents', o.taker_risk_cents,
+                  'makerPosition', o.maker_position,
+                  'legCount', (
+                    SELECT COUNT(*) FROM offer_legs all_legs
+                    WHERE all_legs.offer_id = o.id
+                  ),
+                  'counterofferCount', (
+                    SELECT COUNT(*) FROM counteroffers c
+                    WHERE c.root_offer_id = o.id
+                  )
+                )
+         FROM offers o
+         JOIN offer_legs trigger_leg ON trigger_leg.offer_id = o.id
+         WHERE trigger_leg.market_id = ?
+           AND o.status IN ('cancelled', 'expired')
+           AND NOT EXISTS (
+             SELECT 1 FROM bets b WHERE b.offer_id = o.id
+           )
+           AND EXISTS (
+             SELECT 1 FROM audit_events gate
+             WHERE gate.id = ?
+               AND gate.action = 'deleted_market'
+               AND gate.entity_id = ?
+           )`,
+      )
+      .bind(
+        deletionOperationId,
+        user.id,
+        deletionOperationId,
+        marketId,
+        marketId,
+        deletionOperationId,
+        marketId,
+      ),
+    db
+      .prepare(
+        `DELETE FROM counteroffers
+         WHERE root_offer_id IN (
+           SELECT tombstone.entity_id
+           FROM audit_events tombstone
+           WHERE tombstone.action = 'deleted_inactive_offer'
+             AND json_extract(
+               tombstone.metadata_json,
+               '$.deletionOperationId'
+             ) = ?
+         )
+           AND EXISTS (
+             SELECT 1 FROM audit_events gate
+             WHERE gate.id = ? AND gate.action = 'deleted_market'
+           )`,
+      )
+      .bind(deletionOperationId, deletionOperationId),
+    db
+      .prepare(
+        `DELETE FROM offer_legs
+         WHERE offer_id IN (
+           SELECT tombstone.entity_id
+           FROM audit_events tombstone
+           WHERE tombstone.action = 'deleted_inactive_offer'
+             AND json_extract(
+               tombstone.metadata_json,
+               '$.deletionOperationId'
+             ) = ?
+         )
+           AND EXISTS (
+             SELECT 1 FROM audit_events gate
+             WHERE gate.id = ? AND gate.action = 'deleted_market'
+           )`,
+      )
+      .bind(deletionOperationId, deletionOperationId),
+    db
+      .prepare(
+        `DELETE FROM offers
+         WHERE id IN (
+           SELECT tombstone.entity_id
+           FROM audit_events tombstone
+           WHERE tombstone.action = 'deleted_inactive_offer'
+             AND json_extract(
+               tombstone.metadata_json,
+               '$.deletionOperationId'
+             ) = ?
+         )
+           AND status IN ('cancelled', 'expired')
+           AND NOT EXISTS (
+             SELECT 1 FROM bets b WHERE b.offer_id = offers.id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM offer_legs ol WHERE ol.offer_id = offers.id
+           )
+           AND EXISTS (
+             SELECT 1 FROM audit_events gate
+             WHERE gate.id = ? AND gate.action = 'deleted_market'
+           )`,
+      )
+      .bind(deletionOperationId, deletionOperationId),
     db
       .prepare(
         `DELETE FROM market_revisions
          WHERE market_id = ?
            AND EXISTS (
-             SELECT 1
-             FROM markets m
-             WHERE m.id = market_revisions.market_id
-               AND m.creator_user_id = ?
+             SELECT 1 FROM audit_events gate
+             WHERE gate.id = ?
+               AND gate.action = 'deleted_market'
+               AND gate.entity_id = market_revisions.market_id
            )
            AND NOT EXISTS (
              SELECT 1
@@ -1084,12 +1252,18 @@ async function deleteMarket(
              WHERE brl.market_id = market_revisions.market_id
            )`,
       )
-      .bind(marketId, user.id),
+      .bind(marketId, deletionOperationId),
     db
       .prepare(
         `DELETE FROM markets
          WHERE id = ?
            AND creator_user_id = ?
+           AND EXISTS (
+             SELECT 1 FROM audit_events gate
+             WHERE gate.id = ?
+               AND gate.action = 'deleted_market'
+               AND gate.entity_id = markets.id
+           )
            AND NOT EXISTS (
              SELECT 1 FROM market_revisions mr WHERE mr.market_id = markets.id
            )
@@ -1102,11 +1276,11 @@ async function deleteMarket(
              WHERE brl.market_id = markets.id
            )`,
       )
-      .bind(marketId, user.id),
+      .bind(marketId, user.id, deletionOperationId),
   ]);
   if (
     results[0].meta.changes !== 1 ||
-    results[2].meta.changes !== 1
+    results[6].meta.changes !== 1
   ) {
     throw new AppError(
       409,

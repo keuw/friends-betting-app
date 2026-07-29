@@ -136,6 +136,54 @@ test(
         200,
       );
 
+      const closeBoundary = new Date(Date.now() + 750).toISOString();
+      const closingSoonResponse = await postAction(baseUrl, maker, {
+        type: "create_market",
+        question: `Closed awaiting result ${stamp}`,
+        description: "Closing must not invent a result.",
+        selectionA: "Yes",
+        selectionB: "No",
+        closesAt: closeBoundary,
+      });
+      assert.equal(closingSoonResponse.status, 200);
+      const closingSoonMarket = closingSoonResponse.payload.markets.find(
+        (candidate) => candidate.question === `Closed awaiting result ${stamp}`,
+      );
+      assert.ok(closingSoonMarket);
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          Math.max(0, new Date(closeBoundary).getTime() - Date.now() + 100),
+        ),
+      );
+      const closedUnresolvedState = await getState(baseUrl, maker);
+      const closedUnresolvedMarket = marketFrom(
+        closedUnresolvedState,
+        closingSoonMarket.id,
+      );
+      assert.equal(closedUnresolvedMarket.status, "open");
+      assert.equal(closedUnresolvedMarket.winningSelection, null);
+      const postCloseOffer = await postAction(baseUrl, maker, {
+        type: "create_offer",
+        makerRiskCents: 1_000,
+        takerRiskCents: 1_200,
+        legs: [leg(closedUnresolvedMarket)],
+      });
+      assert.equal(postCloseOffer.status, 409);
+      assert.equal(postCloseOffer.payload.error?.code, "MARKET_CLOSED");
+      const postCloseResolution = await postAction(baseUrl, maker, {
+        type: "resolve_market",
+        marketId: closedUnresolvedMarket.id,
+        marketRevisionId: closedUnresolvedMarket.currentRevisionId,
+        result: "a",
+      });
+      assert.equal(postCloseResolution.status, 200);
+      assert.equal(
+        marketFrom(postCloseResolution.payload, closedUnresolvedMarket.id)
+          .status,
+        "resolved",
+      );
+
       const offerMarket = await createMarket(
         baseUrl,
         maker,
@@ -204,6 +252,81 @@ test(
       assert.equal(
         cancelledMarketReceipt?.metadata.removedInactiveOfferCount,
         1,
+      );
+
+      const mixedOfferMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Mixed offer blockers ${stamp}`,
+      );
+      const terminalMixedOffer = await createOffer(
+        baseUrl,
+        maker,
+        mixedOfferMarket,
+      );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "cancel_offer",
+            offerId: terminalMixedOffer.id,
+          })
+        ).status,
+        200,
+      );
+      const activeMixedOffer = await createOffer(
+        baseUrl,
+        maker,
+        mixedOfferMarket,
+      );
+      const mixedOfferView = marketFrom(
+        await getState(baseUrl, maker),
+        mixedOfferMarket.id,
+      );
+      assert.equal(mixedOfferView.offerReferenceCount, 2);
+      assert.equal(mixedOfferView.activeOfferReferenceCount, 1);
+      assert.equal(mixedOfferView.removableOfferReferenceCount, 1);
+      assert.equal(mixedOfferView.canDelete, false);
+      assert.match(mixedOfferView.deletionBlocker, /active or protected/);
+      const mixedBlockedDelete = await postAction(baseUrl, maker, {
+        type: "delete_market",
+        marketId: mixedOfferMarket.id,
+      });
+      assert.equal(mixedBlockedDelete.status, 409);
+      const mixedBlockedState = await getState(baseUrl, maker);
+      assert.ok(
+        mixedBlockedState.offers.some(
+          (candidate) => candidate.id === terminalMixedOffer.id,
+        ),
+      );
+      assert.equal(
+        mixedBlockedState.activity.some(
+          (activity) =>
+            activity.action === "deleted_inactive_offer" &&
+            activity.entityId === terminalMixedOffer.id,
+        ),
+        false,
+      );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "cancel_offer",
+            offerId: activeMixedOffer.id,
+          })
+        ).status,
+        200,
+      );
+      const mixedCleanup = await postAction(baseUrl, maker, {
+        type: "delete_market",
+        marketId: mixedOfferMarket.id,
+      });
+      assert.equal(mixedCleanup.status, 200);
+      assert.equal(
+        mixedCleanup.payload.activity.find(
+          (activity) =>
+            activity.action === "deleted_market" &&
+            activity.entityId === mixedOfferMarket.id,
+        )?.metadata.removedInactiveOfferCount,
+        2,
       );
 
       const expiredOfferMarket = await createMarket(

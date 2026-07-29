@@ -41,6 +41,8 @@ export type MarketView = {
   currentRevisionId: string;
   revisionNumber: number;
   offerReferenceCount: number;
+  activeOfferReferenceCount: number;
+  removableOfferReferenceCount: number;
   betReferenceCount: number;
   canDelete: boolean;
   deletionBlocker: string | null;

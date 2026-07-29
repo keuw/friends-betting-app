@@ -53,14 +53,19 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
   participation and resolution stay visible in the public activity ledger.
 - Market and matched-bet terms are append-only. Never update a revision in
   place or repoint an existing offer to a newer market revision.
+- A market with `status = open` is offerable only before `closes_at`. After the
+  deadline it is closed and awaiting a creator-recorded result; closing must
+  never automatically resolve, void, or settle it.
 - Either matched-bet participant may request a mutual void while the bet is
   pending. Only the other participant may accept or reject it; acceptance
   retains the bet and request history, marks the bet void, and creates no debt.
   Never use this flow to erase a settled debt.
-- Permanent market deletion is only for a creator-owned market with zero
-  references in `offer_legs` and `bet_revision_legs`. Cancelled, expired,
-  accepted, settled, and void history all block deletion; never add a force or
-  cascade bypass.
+- Permanent market deletion is creator-only. Any open or otherwise protected
+  offer and every `bet_revision_legs` reference blocks it. Cancelled or expired
+  unmatched offers may be removed with the market, but the complete root offer,
+  all of its parlay legs, and its counteroffers must be removed atomically with
+  append-only tombstone receipts. Never shorten a multi-market parlay, remove
+  matched-bet history, or add a client-controlled force bypass.
 - Only the market creator may publish a new market revision. A pending
   matched-bet revision becomes active only after the other participant accepts
   it, and both current and proposed legs must still be open.

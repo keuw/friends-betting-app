@@ -28,6 +28,10 @@ external method, both parties confirm the settlement in Sidebet.
 - The market creator acts as its resolver and may also make, counter, or accept
   offers on that market. Participation and resolution remain public to the
   group.
+- A betting close is not a result. Before the displayed deadline, a market is
+  `Open for offers`; afterward it is `Closed · awaiting result` until its
+  creator resolves or voids it. Every displayed close time includes the year,
+  and the server rejects new offers after the deadline.
 - A market edit publishes a numbered revision instead of rewriting history.
   Existing offers and matched bets keep the exact market version they already
   reference, and each referenced version is resolved independently.
@@ -92,8 +96,10 @@ history, but it is not a full backup of D1.
 Pending matched bets can be voided only when both participants agree in the
 app. That keeps the bet and its public history while creating no debt. A
 separate permanent-delete control is limited to a market creator’s truly
-unused market: any offer or matched-bet reference, even cancelled or final,
-preserves the market and blocks deletion.
+inactive market. Open offers and every matched bet preserve the market and
+block deletion. Cancelled or expired unmatched offers do not block deletion;
+deleting the market removes each complete inactive offer, including all parlay
+legs and counteroffers, while keeping immutable audit receipts.
 
 See [docs/notion-archive.md](./docs/notion-archive.md) for the locked schema,
 least-privilege setup, secret rotation, manual reconciliation, and scheduler

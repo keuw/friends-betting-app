@@ -1451,37 +1451,37 @@ Threat model:
 
 Implementation:
 
-- [ ] Replace the cancelled/expired blocker assertions with failing production
+- [x] Replace the cancelled/expired blocker assertions with failing production
   D1 tests proving both statuses become deletable while open offers remain
   protected.
-- [ ] Add failing tests proving pending, won, lost, mutually voided, and settled
+- [x] Add failing tests proving pending, won, lost, mutually voided, and settled
   matched bets still block deletion and preserve all offer and bet history.
-- [ ] Add a terminal multi-market parlay test proving deletion removes the
+- [x] Add a terminal multi-market parlay test proving deletion removes the
   whole inactive offer and counteroffer thread while leaving unrelated markets
   intact and eligible state recalculated.
-- [ ] Add mixed-reference and race regressions proving an open or accepted
+- [x] Add mixed-reference and race regressions proving an open or accepted
   offer rolls back terminal-offer cleanup, cancellation/expiration races are
   retry-safe, and create-offer-versus-delete remains atomic.
-- [ ] Extend `MarketView` and server row types with total, active/protected, and
+- [x] Extend `MarketView` and server row types with total, active/protected, and
   removable terminal offer counts while preserving the existing total count.
-- [ ] Update the market-state query, `canDelete`, and blocker text to ignore
+- [x] Update the market-state query, `canDelete`, and blocker text to ignore
   unmatched cancelled/expired offers without weakening matched-bet checks.
-- [ ] Implement the operation-gated D1 cleanup batch, immutable inactive-offer
+- [x] Implement the operation-gated D1 cleanup batch, immutable inactive-offer
   tombstones, child-first deletion ordering, final market deletion, and
   structured conflict handling.
-- [ ] Update the market card control, warning copy, confirmation details,
+- [x] Update the market card control, warning copy, confirmation details,
   success message, responsive states, and rendered-output regressions.
-- [ ] Update `README.md` and `CONTRIBUTING.md` with the new eligibility,
+- [x] Update `README.md` and `CONTRIBUTING.md` with the new eligibility,
   multi-market parlay cleanup, audit, and race boundaries.
-- [ ] Inspect D1 query plans and generated schema output; add an additive index
+- [x] Inspect D1 query plans and generated schema output; add an additive index
   only if the existing indexes are insufficient.
-- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect the
   packaged Worker for destructive SQL, disabled foreign keys, or secrets.
-- [ ] Exercise separate creator, non-creator, and observer identities against
+- [x] Exercise separate creator, non-creator, and observer identities against
   open-offer, cancelled-offer, expired-offer, matched-bet, and multi-market
   parlay cases in the production-style D1 runtime.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+- [/] Commit and push the exact verified source, deploy a saved Sites version,
   and verify the new cleanup boundary on the live app without changing matched
   bets or the Notion archive.
 
@@ -1567,32 +1567,32 @@ Ordering contract:
 
 Implementation:
 
-- [ ] Add failing unit tests for lifecycle classification immediately before,
+- [x] Add failing unit tests for lifecycle classification immediately before,
   at, and after `closesAt`, including resolved and void precedence.
-- [ ] Extend market-ledger tests for the new closed-awaiting-result filter,
+- [x] Extend market-ledger tests for the new closed-awaiting-result filter,
   counts/search vocabulary, lifecycle group order, and deterministic injected
   current time.
-- [ ] Add rendered-output regressions for four-digit years, `Open for offers`,
+- [x] Add rendered-output regressions for four-digit years, `Open for offers`,
   `Closed · awaiting result`, `Betting closed`, and hidden post-close offer
   controls.
-- [ ] Add a typed lifecycle helper shared by filtering, sorting, status copy,
+- [x] Add a typed lifecycle helper shared by filtering, sorting, status copy,
   counts, and card capabilities rather than duplicating date comparisons.
-- [ ] Extend `MarketLedgerFilter` and the Markets-tab filter controls with the
+- [x] Extend `MarketLedgerFilter` and the Markets-tab filter controls with the
   derived closed-awaiting-result state and unambiguous labels.
-- [ ] Update market badges, deadline copy, offer-control visibility, edit
+- [x] Update market badges, deadline copy, offer-control visibility, edit
   capability, empty-state copy, and status search terms.
-- [ ] Add the lightweight UI clock tick and ensure it does not discard search,
+- [x] Add the lightweight UI clock tick and ensure it does not discard search,
   filters, form input, selected offer legs, or other local state.
-- [ ] Add `year: "numeric"` to the shared absolute date formatter and audit
+- [x] Add `year: "numeric"` to the shared absolute date formatter and audit
   every `closesAt` rendering path for use of that formatter.
-- [ ] Update `README.md` and `CONTRIBUTING.md` with the close-versus-resolution
+- [x] Update `README.md` and `CONTRIBUTING.md` with the close-versus-resolution
   lifecycle and the server-authoritative offer cutoff.
-- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, and `npm run build`; verify there is no persistence
   migration and no regression to server deadline enforcement.
-- [ ] Exercise future-open, past-unresolved, resolved, and void markets in the
+- [x] Exercise future-open, past-unresolved, resolved, and void markets in the
   production-style D1 runtime and confirm filter counts and offer rejection.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+- [/] Commit and push the exact verified source, deploy a saved Sites version,
   and verify the year-bearing dates and all five filters on the live app.
 
 Acceptance:
