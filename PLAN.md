@@ -2146,24 +2146,24 @@ Interface contract:
 
 Implementation:
 
-- [ ] Add failing parser, domain, rendered-bundle, and production D1 tests for
+- [x] Add failing parser, domain, rendered-bundle, and production D1 tests for
   creator-only reopen actions, later-only deadline edits, and final
   resolved/void markets.
-- [ ] Preserve each offer leg's original market revision across automatic
+- [x] Preserve each offer leg's original market revision across automatic
   deadline extensions, including a safe migration/backfill for existing legs.
-- [ ] Add a typed `reopen_market` action with bounded inputs and implement the
+- [x] Add a typed `reopen_market` action with bounded inputs and implement the
   deadline-only append-only revision transition with optimistic concurrency.
-- [ ] Extend `edit_market` so unchanged-or-later deadlines remain valid and
+- [x] Extend `edit_market` so unchanged-or-later deadlines remain valid and
   pure deadline extensions atomically advance only eligible open offer legs
   while recomputing root-offer expiration.
-- [ ] Prove mixed term edits, expired/cancelled offers, accepted offers,
+- [x] Prove mixed term edits, expired/cancelled offers, accepted offers,
   matched bets, and parlays keep their required frozen history.
-- [ ] Add the closed-market reopen panel, open-editor deadline guidance,
+- [x] Add the closed-market reopen panel, open-editor deadline guidance,
   affected-offer warnings, and original-versus-extended offer copy.
-- [ ] Update `README.md`, `CONTRIBUTING.md`, and `DESIGN.md` with the narrow
+- [x] Update `README.md`, `CONTRIBUTING.md`, and `DESIGN.md` with the narrow
   exception that only open, deadline-only edits may advance an existing open
   offer while preserving its original revision attribution.
-- [ ] Run unit, full built/D1 integration, lint, type, migration generation,
+- [x] Run unit, full built/D1 integration, lint, type, migration generation,
   and production build gates; inspect the generated migration and test the
   accept-versus-extension and concurrent-reopen races.
 - [ ] Commit and push the verified source, save and deploy a Sites version, and
