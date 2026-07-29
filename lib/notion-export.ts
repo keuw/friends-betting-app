@@ -1,6 +1,7 @@
 import type {
   BetRevisionStatus,
   BetStatus,
+  BetVoidRequestStatus,
   ParlayPosition,
   Selection,
 } from "@/lib/contracts";
@@ -31,6 +32,16 @@ export type MatchedBetExportRevision = {
   legs: MatchedBetExportLeg[];
 };
 
+export type MatchedBetExportVoidRequest = {
+  baseRevisionNumber: number;
+  requesterName: string;
+  recipientName: string;
+  reason: string;
+  status: BetVoidRequestStatus;
+  createdAt: string;
+  respondedAt: string | null;
+};
+
 export type MatchedBetExport = {
   betId: string;
   makerName: string;
@@ -44,6 +55,7 @@ export type MatchedBetExport = {
   activeRevisionNumber: number;
   legs: MatchedBetExportLeg[];
   revisions: MatchedBetExportRevision[];
+  voidRequests: MatchedBetExportVoidRequest[];
 };
 
 type NotionRichText = Array<{
@@ -296,6 +308,7 @@ export function notionPropertiesForBet(
     "Active Terms": richText(renderActiveTerms(sanitized)),
     Legs: richText(renderLegs(sanitized.legs)),
     "Revision History": richText(renderRevisionHistory(sanitized)),
+    "Void History": richText(renderVoidHistory(sanitized)),
     "Last Exported": {
       type: "date",
       date: { start: exportedAt },
@@ -371,6 +384,18 @@ function sanitizeMatchedBet(bet: MatchedBetExport): MatchedBetExport {
       .sort(
         (left, right) => left.revisionNumber - right.revisionNumber,
       ),
+    voidRequests: [...bet.voidRequests]
+      .map((request) => ({
+        ...request,
+        requesterName: redactEmails(request.requesterName),
+        recipientName: redactEmails(request.recipientName),
+        reason: redactEmails(request.reason),
+      }))
+      .sort(
+        (left, right) =>
+          left.createdAt.localeCompare(right.createdAt) ||
+          left.baseRevisionNumber - right.baseRevisionNumber,
+      ),
   };
 }
 
@@ -439,6 +464,23 @@ function renderRevisionHistory(
         renderLegs(revision.legs),
       ].join("\n");
     })
+    .join("\n\n");
+}
+
+function renderVoidHistory(bet: MatchedBetExport): string {
+  if (bet.voidRequests.length === 0) {
+    return "No mutual void requests recorded.";
+  }
+  return bet.voidRequests
+    .map((request) =>
+      [
+        `Bet revision ${request.baseRevisionNumber} — ${request.status}`,
+        `${request.requesterName} requested approval from ${request.recipientName}`,
+        `Created ${request.createdAt}`,
+        `Responded ${request.respondedAt ?? "not yet"}`,
+        `Reason: ${request.reason}`,
+      ].join("\n"),
+    )
     .join("\n\n");
 }
 

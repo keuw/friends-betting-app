@@ -2,6 +2,7 @@ import { ensureSchema, getD1 } from "@/db";
 import type {
   BetRevisionStatus,
   BetStatus,
+  BetVoidRequestStatus,
   MarketStatus,
   ParlayPosition,
   Selection,
@@ -60,6 +61,17 @@ type ExportLegRow = {
   maker_selection: Selection;
 };
 
+type ExportVoidRequestRow = {
+  bet_id: string;
+  base_revision_number: number;
+  requester_name: string;
+  recipient_name: string;
+  reason: string;
+  status: BetVoidRequestStatus;
+  created_at: string;
+  responded_at: string | null;
+};
+
 type ExportStateRow = {
   notion_page_id: string | null;
   payload_hash: string | null;
@@ -115,7 +127,8 @@ export class D1ExportRepository implements ExportRepository {
   async listMatchedBets(): Promise<MatchedBetExport[]> {
     await ensureSchema();
     const db = getD1();
-    const [betsResult, revisionsResult, legsResult] = await db.batch([
+    const [betsResult, revisionsResult, legsResult, voidRequestsResult] =
+      await db.batch([
       db.prepare(
         `SELECT
            b.id AS bet_id,
@@ -168,18 +181,41 @@ export class D1ExportRepository implements ExportRepository {
            brl.maker_selection
          FROM bet_revision_legs brl
          JOIN market_revisions mr ON mr.id = brl.market_revision_id
-         ORDER BY brl.bet_revision_id, datetime(mr.closes_at),
+        ORDER BY brl.bet_revision_id, datetime(mr.closes_at),
                   brl.market_revision_id`,
+      ),
+      db.prepare(
+        `SELECT
+           vr.bet_id,
+           base.revision_number AS base_revision_number,
+           requester.display_name AS requester_name,
+           recipient.display_name AS recipient_name,
+           vr.reason,
+           vr.status,
+           vr.created_at,
+           vr.responded_at
+         FROM bet_void_requests vr
+         JOIN bet_revisions base ON base.id = vr.base_revision_id
+         JOIN users requester ON requester.id = vr.requester_user_id
+         JOIN users recipient ON recipient.id = vr.recipient_user_id
+         ORDER BY vr.bet_id, datetime(vr.created_at), vr.id`,
       ),
     ]);
 
     const bets = resultRows<ExportBetRow>(betsResult);
     const revisions = resultRows<ExportRevisionRow>(revisionsResult);
     const legs = resultRows<ExportLegRow>(legsResult);
+    const voidRequests = resultRows<ExportVoidRequestRow>(
+      voidRequestsResult,
+    );
     const revisionsByBet = groupBy(revisions, (row) => row.bet_id);
     const legsByRevision = groupBy(
       legs,
       (row) => row.bet_revision_id,
+    );
+    const voidRequestsByBet = groupBy(
+      voidRequests,
+      (row) => row.bet_id,
     );
 
     return bets.map((bet) => {
@@ -211,6 +247,17 @@ export class D1ExportRepository implements ExportRepository {
           respondedAt: revision.responded_at,
           legs: (legsByRevision.get(revision.id) ?? []).map(toExportLeg),
         })),
+        voidRequests: (voidRequestsByBet.get(bet.bet_id) ?? []).map(
+          (request) => ({
+            baseRevisionNumber: request.base_revision_number,
+            requesterName: request.requester_name,
+            recipientName: request.recipient_name,
+            reason: request.reason,
+            status: request.status,
+            createdAt: request.created_at,
+            respondedAt: request.responded_at,
+          }),
+        ),
       };
     });
   }

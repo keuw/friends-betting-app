@@ -59,6 +59,17 @@ const matchedBet: MatchedBetExport = {
       legs: [],
     },
   ],
+  voidRequests: [
+    {
+      baseRevisionNumber: 2,
+      requesterName: "Alice alice@example.com",
+      recipientName: "Bob",
+      reason: "Duplicate bet reported by alice@example.com",
+      status: "rejected",
+      createdAt: "2026-07-22T17:00:00.000Z",
+      respondedAt: "2026-07-22T18:00:00.000Z",
+    },
+  ],
 };
 
 test("canonical export payload is stable and omits email addresses", async () => {
@@ -91,6 +102,9 @@ test("Notion properties contain the stable external key and readable history", (
   assert.match(serialized, /Will the Giants win/);
   assert.match(serialized, /Alice: Back.*Fade/);
   assert.match(serialized, /Alice fades this parlay/);
+  assert.match(serialized, /Void History/);
+  assert.match(serialized, /Duplicate bet reported/);
+  assert.match(serialized, /Bet revision 2 — rejected/);
   assert.doesNotMatch(serialized, /alice@example\.com/i);
   assert.deepEqual(properties["Maker Position"], {
     type: "select",

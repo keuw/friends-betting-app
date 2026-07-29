@@ -26,6 +26,7 @@ const response = await fetch(
             ],
           },
         },
+        "Void History": { rich_text: {} },
       },
     }),
   },
@@ -40,16 +41,19 @@ if (!response.ok) {
 const body = await response.json();
 if (
   body.object !== "data_source" ||
-  !body.properties?.["Maker Position"]
+  !body.properties?.["Maker Position"] ||
+  !body.properties?.["Void History"]
 ) {
-  throw new Error("Notion did not confirm the Maker Position property.");
+  throw new Error(
+    "Notion did not confirm the Maker Position and Void History properties.",
+  );
 }
 
 console.log(
   JSON.stringify(
     {
       dataSourceId: body.id,
-      reconciledProperties: ["Maker Position"],
+      reconciledProperties: ["Maker Position", "Void History"],
     },
     null,
     2,

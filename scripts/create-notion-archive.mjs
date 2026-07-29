@@ -65,6 +65,7 @@ const response = await fetch("https://api.notion.com/v1/databases", {
         "Active Terms": { rich_text: {} },
         Legs: { rich_text: {} },
         "Revision History": { rich_text: {} },
+        "Void History": { rich_text: {} },
         "Last Exported": { date: {} },
         "Sidebet URL": { url: {} },
       },

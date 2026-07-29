@@ -173,6 +173,46 @@ test("parlay offers can explicitly Back or Fade with complementary role copy", a
   assert.match(clientBundle, /fades it/);
 });
 
+test("mutual matched-bet voids preserve public history and require agreement", async () => {
+  const [serverBundle, clientBundle, migrations] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readMigrations(),
+  ]);
+
+  assert.match(migrations, /CREATE TABLE `bet_void_requests`/);
+  assert.match(migrations, /bet_void_requests_one_pending/);
+  assert.match(serverBundle, /request_bet_void/);
+  assert.match(serverBundle, /respond_bet_void/);
+  assert.match(serverBundle, /cancel_bet_void/);
+  assert.match(serverBundle, /BET_VOID_STALE/);
+  assert.match(serverBundle, /Void History/);
+  assert.match(clientBundle, /Request mutual void/);
+  assert.match(clientBundle, /Agree and void bet/);
+  assert.match(clientBundle, /Keep bet active/);
+  assert.match(clientBundle, /Voided by mutual agreement/);
+  assert.match(clientBundle, /Requests and responses stay public/);
+});
+
+test("market creators receive a guarded permanent-delete flow for unused markets", async () => {
+  const [serverBundle, clientBundle, migrations] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readMigrations(),
+  ]);
+
+  assert.match(migrations, /bet_revision_legs_market_idx/);
+  assert.match(serverBundle, /delete_market/);
+  assert.match(serverBundle, /deleted_market/);
+  assert.match(serverBundle, /NOT_MARKET_CREATOR/);
+  assert.match(serverBundle, /MARKET_IN_USE/);
+  assert.match(clientBundle, /Delete market/);
+  assert.match(clientBundle, /PERMANENT DELETE/);
+  assert.match(clientBundle, /Permanently delete/);
+  assert.match(clientBundle, /A minimal deletion receipt remains/);
+  assert.match(clientBundle, /Cannot delete:/);
+});
+
 test("weekly Notion export is protected, idempotent, and contains no committed token", async () => {
   const [serverBundle, migrations, schedulerConfig] = await Promise.all([
     readFile(new URL("dist/server/index.js", root), "utf8"),

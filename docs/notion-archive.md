@@ -48,7 +48,9 @@ offline settlements, and the complete audit ledger remain in D1 only.
 
 The schema contains: Bet, Sidebet Bet ID, Maker, Taker, Maker Risk, Taker Risk,
 Maker Position, Status, Matched At, Settled At, Active Revision, Leg Count,
-Active Terms, Legs, Revision History, Last Exported, and Sidebet URL.
+Active Terms, Legs, Revision History, Void History, Last Exported, and Sidebet
+URL. Void History records each request’s base bet revision, participants,
+redacted reason, final status, and timestamps.
 
 After pulling a release that adds archive fields, reconcile an existing data
 source before triggering the export:
@@ -116,3 +118,9 @@ zero created or updated records.
 - `notion_export_runs` records run counts and status.
   `notion_bet_exports` records the page mapping, payload hash, last successful
   export, and redacted last error.
+- Mutual-void requests are preserved in `Void History` whether accepted,
+  rejected, cancelled, or superseded. Agreement voids a pending bet without
+  deleting its terms or creating debt.
+- Permanent market deletion is outside this archive and is allowed only when
+  no offer or matched-bet reference exists, so it cannot remove or invalidate
+  an archived matched bet.

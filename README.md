@@ -86,8 +86,14 @@ Production hosting is configured through `.openai/hosting.json`.
 
 Matched bets can also be upserted into a private Notion database each Sunday.
 This human-readable archive includes the Back/Fade position, winning rule,
-frozen legs, and complete matched-bet revision history, but it is not a full
-backup of D1.
+frozen legs, complete matched-bet revision history, and redacted mutual-void
+history, but it is not a full backup of D1.
+
+Pending matched bets can be voided only when both participants agree in the
+app. That keeps the bet and its public history while creating no debt. A
+separate permanent-delete control is limited to a market creator’s truly
+unused market: any offer or matched-bet reference, even cancelled or final,
+preserves the market and blocks deletion.
 
 See [docs/notion-archive.md](./docs/notion-archive.md) for the locked schema,
 least-privilege setup, secret rotation, manual reconciliation, and scheduler

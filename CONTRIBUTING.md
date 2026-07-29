@@ -53,6 +53,14 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
   participation and resolution stay visible in the public activity ledger.
 - Market and matched-bet terms are append-only. Never update a revision in
   place or repoint an existing offer to a newer market revision.
+- Either matched-bet participant may request a mutual void while the bet is
+  pending. Only the other participant may accept or reject it; acceptance
+  retains the bet and request history, marks the bet void, and creates no debt.
+  Never use this flow to erase a settled debt.
+- Permanent market deletion is only for a creator-owned market with zero
+  references in `offer_legs` and `bet_revision_legs`. Cancelled, expired,
+  accepted, settled, and void history all block deletion; never add a force or
+  cascade bypass.
 - Only the market creator may publish a new market revision. A pending
   matched-bet revision becomes active only after the other participant accepts
   it, and both current and proposed legs must still be open.
@@ -60,7 +68,8 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - Offline payment claims require confirmation from the other party.
 - The app never holds, transfers, or verifies money.
 - The weekly Notion archive is a human-readable matched-bet ledger, not a
-  complete backup. Do not expand its scope to identity emails or credentials.
+  complete backup. Its Void History is redacted and append-only. Do not expand
+  its scope to identity emails or credentials.
 
 ## Interface changes
 

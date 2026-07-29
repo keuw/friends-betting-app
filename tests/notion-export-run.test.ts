@@ -20,6 +20,7 @@ const bet = {
   activeRevisionNumber: 1,
   legs: [],
   revisions: [],
+  voidRequests: [],
 } satisfies MatchedBetExport;
 
 test("export run records unchanged and failed bets without losing progress", async () => {
