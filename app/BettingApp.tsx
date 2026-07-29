@@ -833,6 +833,14 @@ function OfferCard({
                 <span className="revision-tag">
                   Market v{leg.marketRevisionNumber}
                 </span>
+                {leg.originalMarketRevisionId !== leg.marketRevisionId && (
+                  <p className="offer-deadline-extension">
+                    Originally posted under market v
+                    {leg.originalMarketRevisionNumber}, closing{" "}
+                    {dateTime(leg.originalMarketClosesAt)}. Deadline extended
+                    to v{leg.marketRevisionNumber}.
+                  </p>
+                )}
               </div>
               <div className="offer-listed-pick">
                 <span>
@@ -2504,6 +2512,7 @@ function MarketCard({
   onCreateOffer: (marketId: string, selection: Selection) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const currentRevision =
@@ -2513,6 +2522,10 @@ function MarketCard({
   const canEdit =
     market.createdByMe &&
     lifecycle === "open";
+  const canReopen =
+    market.createdByMe &&
+    lifecycle === "closed" &&
+    currentRevision?.status === "open";
 
   return (
     <article className="market-row">
@@ -2567,6 +2580,16 @@ function MarketCard({
         />
       )}
 
+      {reopening && currentRevision && (
+        <MarketReopenForm
+          market={market}
+          revision={currentRevision}
+          busy={busy}
+          onAction={onAction}
+          onDone={() => setReopening(false)}
+        />
+      )}
+
       <div className="market-row-footer">
         <span>
           {lifecycle === "closed" ? "Betting closed" : "Closes"}{" "}
@@ -2578,9 +2601,27 @@ function MarketCard({
               type="button"
               className="button-quiet"
               disabled={busy !== null}
-              onClick={() => setEditing((current) => !current)}
+              aria-expanded={editing}
+              onClick={() => {
+                setReopening(false);
+                setEditing((current) => !current);
+              }}
             >
               {editing ? "Close editor" : "Edit market"}
+            </button>
+          )}
+          {canReopen && (
+            <button
+              type="button"
+              className="button-quiet"
+              disabled={busy !== null}
+              aria-expanded={reopening}
+              onClick={() => {
+                setEditing(false);
+                setReopening((current) => !current);
+              }}
+            >
+              {reopening ? "Close reopen panel" : "Reopen market"}
             </button>
           )}
           <button
@@ -2695,6 +2736,16 @@ function MarketEditForm({
     toDateTimeInput(revision.closesAt),
   );
   const [changeNote, setChangeNote] = useState("");
+  const proposedCloseMs = new Date(closesAt).getTime();
+  const currentCloseMs = new Date(revision.closesAt).getTime();
+  const deadlineExtended = proposedCloseMs > currentCloseMs;
+  const deadlineShortened = proposedCloseMs < currentCloseMs;
+  const termsChanged =
+    question.trim() !== revision.question ||
+    description.trim() !== revision.description ||
+    selectionA.trim() !== revision.selectionA ||
+    selectionB.trim() !== revision.selectionB;
+  const extendsOpenOffers = deadlineExtended && !termsChanged;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -2710,7 +2761,9 @@ function MarketEditForm({
         closesAt: new Date(closesAt).toISOString(),
         changeNote,
       },
-      "New market revision published. Existing offers and bets kept their original terms.",
+      extendsOpenOffers
+        ? "Deadline extended. Eligible open offers now use the later close; matched bets kept their accepted terms."
+        : "New market revision published. Existing offers and bets kept their original terms.",
     );
     onDone();
   }
@@ -2725,8 +2778,8 @@ function MarketEditForm({
         <span>v{revision.revisionNumber} stays public</span>
       </div>
       <p>
-        This creates a new version. Existing offers and matched bets keep the
-        exact revision they already reference.
+        This creates a new version. The deadline may stay the same or move
+        later, never earlier. Matched bets always keep their accepted version.
       </p>
       <label>
         <span>The question</span>
@@ -2771,10 +2824,27 @@ function MarketEditForm({
         <input
           type="datetime-local"
           value={closesAt}
+          min={toDateTimeInput(revision.closesAt)}
           onChange={(event) => setClosesAt(event.target.value)}
           required
         />
       </label>
+      <p
+        className={`market-edit-impact ${
+          extendsOpenOffers ? "will-extend" : ""
+        }`}
+      >
+        {extendsOpenOffers
+          ? `Deadline extensions update ${market.activeOfferReferenceCount} open offer${market.activeOfferReferenceCount === 1 ? "" : "s"} on this market. Each offer keeps its original version in public history.`
+          : termsChanged
+            ? "Because other terms changed, existing offers keep their previous market version and deadline."
+            : "Existing offers change only for a deadline-only extension."}
+      </p>
+      {deadlineShortened && (
+        <p className="market-edit-error" role="alert">
+          Choose the current deadline or a later one.
+        </p>
+      )}
       <label>
         <span>Change note</span>
         <textarea
@@ -2793,10 +2863,112 @@ function MarketEditForm({
           disabled={
             busy !== null ||
             question.trim().length < 5 ||
-            changeNote.trim().length < 3
+            changeNote.trim().length < 3 ||
+            !Number.isFinite(proposedCloseMs) ||
+            deadlineShortened
           }
         >
           Publish new revision
+        </button>
+        <button type="button" className="button-quiet" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MarketReopenForm({
+  market,
+  revision,
+  busy,
+  onAction,
+  onDone,
+}: {
+  market: MarketView;
+  revision: MarketRevisionView;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+  onDone: () => void;
+}) {
+  const [closesAt, setClosesAt] = useState(defaultCloseTime);
+  const [changeNote, setChangeNote] = useState("");
+  const [openedAt] = useState(Date.now);
+  const proposedCloseMs = new Date(closesAt).getTime();
+  const validFutureClose =
+    Number.isFinite(proposedCloseMs) && proposedCloseMs > openedAt;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await onAction(
+      {
+        type: "reopen_market",
+        marketId: market.id,
+        baseRevisionId: revision.id,
+        closesAt: new Date(closesAt).toISOString(),
+        changeNote,
+      },
+      "Market reopened for new offers. Expired offers and matched bets stayed unchanged.",
+    );
+    onDone();
+  }
+
+  return (
+    <form
+      className="market-reopen-panel"
+      aria-label="Reopen market"
+      onSubmit={submit}
+    >
+      <div className="revision-editor-head">
+        <div>
+          <span>REOPEN MARKET</span>
+          <h4>Open version {revision.revisionNumber + 1} for new offers</h4>
+        </div>
+        <span>Terms stay locked</span>
+      </div>
+      <p>
+        Betting closed {dateTime(revision.closesAt)}. Choose a new future
+        deadline; the question, context, and outcomes cannot change here.
+      </p>
+      <div className="market-reopen-warning">
+        <strong>Expired offers stay expired.</strong>
+        <span>
+          Reopening accepts new offers only. Existing matched bets keep their
+          original terms.
+        </span>
+      </div>
+      <label>
+        <span>New betting deadline</span>
+        <input
+          type="datetime-local"
+          value={closesAt}
+          min={toDateTimeInput(new Date(openedAt + 60_000).toISOString())}
+          onChange={(event) => setClosesAt(event.target.value)}
+          required
+        />
+      </label>
+      <label>
+        <span>Why is this market reopening?</span>
+        <textarea
+          value={changeNote}
+          onChange={(event) => setChangeNote(event.target.value)}
+          placeholder="The event was postponed, so betting has a new deadline."
+          minLength={3}
+          maxLength={200}
+          required
+        />
+      </label>
+      <div className="revision-editor-actions">
+        <button
+          type="submit"
+          className="button-accept"
+          disabled={
+            busy !== null ||
+            !validFutureClose ||
+            changeNote.trim().length < 3
+          }
+        >
+          Reopen for new offers
         </button>
         <button type="button" className="button-quiet" onClick={onDone}>
           Cancel

@@ -77,6 +77,16 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
 - Numbered revision badges identify the exact terms used by each offer and bet.
   Revision timelines are append-only and show author, timestamp, change note,
   status, and the meaningful before/after fields.
+- Open-market deadline extensions stay inside the existing market editor. The
+  editor explains that dates may stay unchanged or move later and previews
+  whether open offers will advance or retain their current version.
+- Closed unresolved markets use a focused `Reopen market` panel rather than
+  the full terms editor. It keeps the question and outcomes visibly locked,
+  shows the prior close time, requires a reason, and warns that expired offers
+  stay expired.
+- When a deadline-only extension advances an open offer, its leg shows both the
+  original market revision and the new effective deadline. This exception is
+  explicit rather than silently presenting the offer as newly posted.
 - A proposed matched-bet revision always appears beside the still-active terms
   in an explicit old-versus-new comparison. Acceptance and rejection are
   visually distinct, and the interface states that nothing changes before the

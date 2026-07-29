@@ -33,8 +33,15 @@ external method, both parties confirm the settlement in Sidebet.
   creator resolves or voids it. Every displayed close time includes the year,
   and the server rejects new offers after the deadline.
 - A market edit publishes a numbered revision instead of rewriting history.
-  Existing offers and matched bets keep the exact market version they already
-  reference, and each referenced version is resolved independently.
+  A deadline-only extension automatically advances offers that are still open,
+  while preserving the original version on each offer for public review. If
+  any other term changes, existing offers keep their exact market version.
+  Matched bets always keep their accepted version.
+- An open market’s creator may keep its deadline or move it later from
+  `Edit market`, but may not shorten it. After an unresolved market closes, its
+  creator may reopen it with a new future deadline and reason. Reopening cannot
+  change the question or outcomes, revive expired offers, or reopen a resolved
+  or voided market.
 - Either participant may propose new terms for a pending matched bet. The
   current version remains active unless the other participant accepts the
   complete proposal; rejected and cancelled proposals stay in the public

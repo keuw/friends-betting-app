@@ -52,10 +52,17 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - Market creators may participate in offers on markets they resolve; both the
   participation and resolution stay visible in the public activity ledger.
 - Market and matched-bet terms are append-only. Never update a revision in
-  place or repoint an existing offer to a newer market revision.
+  place. The only permitted existing-offer revision advance is an atomic,
+  creator-authored deadline-only extension while the offer and all of its legs
+  remain open; retain the offer leg’s original revision attribution. Any edit
+  to the question, context, or outcomes leaves existing offers unchanged.
 - A market with `status = open` is offerable only before `closes_at`. After the
   deadline it is closed and awaiting a creator-recorded result; closing must
   never automatically resolve, void, or settle it.
+- Only the creator may reopen a closed unresolved market. Reopening creates a
+  deadline-only revision with a future close and audit reason. It must not
+  revive expired offers or affect accepted offers, matched bets, resolved
+  markets, or voided markets.
 - Either matched-bet participant may request a mutual void while the bet is
   pending. Only the other participant may accept or reject it; acceptance
   retains the bet and request history, marks the bet void, and creates no debt.

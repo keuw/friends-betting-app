@@ -1346,6 +1346,18 @@ button.brand-lockup {
   margin-top: 0.28rem;
 }
 
+.offer-deadline-extension {
+  max-width: 34rem;
+  margin: 0.45rem 0 0;
+  padding: 0.45rem 0.55rem;
+  border-left: 3px solid #d49a24;
+  background: #fff6d8;
+  color: var(--ink);
+  font-size: 0.57rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .offer-leg strong {
   color: var(--blue);
   font-family: var(--font-geist-mono), monospace;
@@ -2940,7 +2952,8 @@ button.brand-lockup {
   background: var(--danger);
 }
 
-.market-edit-form {
+.market-edit-form,
+.market-reopen-panel {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -2951,6 +2964,84 @@ button.brand-lockup {
 
 .market-edit-form .two-field {
   gap: 0.65rem;
+}
+
+.market-edit-impact,
+.market-edit-error {
+  margin: 0 !important;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid var(--line);
+  background: var(--paper);
+  font-size: 0.62rem !important;
+}
+
+.market-edit-impact.will-extend {
+  border-left-color: #4c841e;
+  background: #efffd9;
+  color: var(--ink);
+}
+
+.market-edit-error {
+  border-left-color: var(--danger);
+  background: var(--surface-danger);
+  color: var(--danger) !important;
+}
+
+.market-reopen-panel {
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border-color: #d49a24;
+  background: #fff9e7;
+}
+
+.market-reopen-panel > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+.market-reopen-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.market-reopen-panel label > span {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.market-reopen-panel input,
+.market-reopen-panel textarea {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.7rem;
+}
+
+.market-reopen-panel textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.market-reopen-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(212, 154, 36, 0.5);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.market-reopen-warning span {
+  color: var(--muted);
 }
 
 .market-revision-history {
