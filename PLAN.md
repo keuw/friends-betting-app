@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phases 10 and 11 complete and verified.
+**Status:** Phases 10 and 11 complete and verified; Phase 12 planned and awaiting approval.
 
 ## Product contract
 
@@ -778,6 +778,184 @@ Acceptance:
   invoke a manual reconciliation in addition to its weekly schedule.
 - Existing authentication, betting, editing, settlement, and public-audit
   behavior remains unchanged.
+
+### Phase 12 — Back or fade a parlay
+
+Let an offer creator choose which side of a multi-leg parlay they want. The
+selected legs always define one parlay proposition:
+
+`parlay = leg 1 AND leg 2 AND ...`
+
+`fade = NOT(parlay) = leg 1 loses OR leg 2 loses OR ...`
+
+The app must never model a fade by creating reversed duplicate legs. Instead,
+the immutable offer or bet revision records whether the original maker backs
+or fades the selected parlay.
+
+Position contract:
+
+- Introduce a typed `ParlayPosition` with exactly `back` and `fade`.
+- The offer composer displays a segmented `Back this parlay` / `Fade this
+  parlay` selector only when two or more legs are selected.
+- `Back this parlay` is always the default. Removing legs until only one
+  remains resets the position to `back` before submission.
+- A straight offer has no position selector. Its selected outcome continues to
+  describe the original maker's side directly.
+- The selected leg outcomes always describe the parlay being evaluated,
+  regardless of which participant backs it.
+- When the maker position is `back`, the maker wins only if every non-void leg
+  wins; the taker wins as soon as any active leg loses.
+- When the maker position is `fade`, the maker wins as soon as any active leg
+  loses; the taker wins only if every non-void leg wins.
+- Voided legs are removed. If every leg is void, the bet is void and creates no
+  debt.
+- If no leg has lost and an active leg is unresolved, the bet remains pending.
+- A decisive loss settles immediately. Later leg results may update their
+  display state but never reopen the result or alter the immutable debt.
+- Voided legs never recalculate the manually agreed risk amounts. The winner
+  receives the other participant's exact accepted maximum-loss amount.
+
+Negotiation and revision contract:
+
+- A root offer freezes the maker's Back/Fade position.
+- Counteroffers inherit the root position and may negotiate risk amounts only.
+  No position field is accepted from a counteroffer request.
+- The acceptance action names the position the taker receives: a Fade root uses
+  `Back this parlay`; a Back root uses `Fade this parlay`.
+- Either matched-bet participant may propose changing Back/Fade as part of a
+  complete bet revision.
+- A proposed position change has no effect until the other participant accepts
+  that exact append-only revision.
+- Switching Back/Fade does not swap risk amounts. Maker and taker risks remain
+  attached to those people unless the proposal explicitly changes them.
+- A one-leg bet revision must use `back`; the selected leg continues to express
+  the maker's desired straight-bet outcome.
+- Existing offers and bet revisions are backfilled as `back`, preserving every
+  historical and pending result.
+
+Persistence and compatibility contract:
+
+- Add `maker_position TEXT NOT NULL DEFAULT 'back'` with a `back`/`fade` check
+  constraint to `offers` and `bet_revisions`.
+- Do not duplicate the position on `bets` or `counteroffers`. The root offer is
+  the source for acceptance, and `bets.current_revision_id` identifies the
+  active matched-bet position.
+- Keep the historical D1 `maker_selection` column names, but expose those
+  values as parlay selections in new TypeScript and user-facing terminology.
+- Extend runtime schema initialization with additive, idempotent column checks
+  and generate the next non-destructive Drizzle migration.
+- A missing position in a legacy `create_offer` request resolves to `back`.
+- A missing position in a legacy matched-bet revision request inherits the
+  current active revision so a stale browser cannot silently flip a Fade bet
+  back to Back.
+- Initial bet acceptance copies the root offer position into revision 1 inside
+  the same atomic acceptance batch.
+
+Interface and history contract:
+
+- Open parlay offers show `BACKING PARLAY` or `FADING PARLAY` plus a sentence
+  naming both winning conditions, for example: `Tony wins if any pick misses;
+  the opponent wins if every pick hits.`
+- Matched bets name both roles, for example: `Tony fades this parlay · Alex
+  backs it`, alongside each person's exact maximum loss.
+- Participant ribbons use `BACK` or `FADE` for parlays instead of the internal
+  `maker`/`taker` labels.
+- Current-versus-proposed revision summaries show the position on both sides.
+- Revision history records explicit before-and-after role changes, such as
+  `Tony: Back → Fade; Alex: Fade → Back`.
+- Audit metadata for offer creation, initial acceptance, revision proposal, and
+  revision acceptance contains the relevant immutable position without
+  identity emails.
+- The weekly Notion archive stores the active maker position, renders the
+  natural-language winning rule, and includes position changes in revision
+  history. Its canonical payload hash includes these values so existing pages
+  update exactly once after deployment.
+
+Integrity and threat model:
+
+- Treat every client-supplied position as untrusted. The action parser and
+  server accept only `back` or `fade`, and the server rejects `fade` when fewer
+  than two distinct legs exist.
+- Settlement reads the position from the active persisted bet revision, never
+  from request payloads or UI state.
+- Offer acceptance must atomically copy the root position with the frozen legs,
+  risks, and market revisions; concurrent acceptance still creates at most one
+  bet.
+- Bet-revision acceptance must atomically recheck the pending revision,
+  recipient, current active revision, open leg windows, and unresolved bet
+  before activating a position change.
+- Market resolution and revision acceptance races must produce one valid
+  transition with no partial position, settlement, or debt state.
+- Existing rows must never be interpreted as `fade` due to null, missing, or
+  malformed data; the migration and read layer both preserve `back`.
+- Notion failures must not affect D1 settlement. Export errors remain retryable
+  through the existing run ledger and never expose secrets or identity emails.
+
+Implementation:
+
+- [ ] Add failing domain truth-table tests for Back and Fade across all-hit,
+  one-miss, pending, partially void, and all-void parlays; prove that one miss
+  settles a Fade winner immediately and exact risk amounts remain unchanged.
+- [ ] Add failing parser and production D1 regressions for create-offer
+  position validation, legacy defaults, counter inheritance, atomic initial
+  revision persistence, Fade settlement debts, mutually approved position
+  changes, stale revision responses, and resolution-versus-revision races.
+- [ ] Add `ParlayPosition` and position-aware offer, bet revision, state, and
+  Notion export contracts in `lib/contracts.ts`, `lib/action-parser.ts`, and
+  `lib/notion-export.ts`.
+- [ ] Refactor `lib/domain.ts` so grading first determines whether the selected
+  parlay won, lost, remains pending, or is void, then maps that proposition
+  result through the persisted maker position to `maker_won` or `taker_won`.
+- [ ] Add the two `maker_position` columns to `db/schema.ts`, `db/index.ts`,
+  and the generated Drizzle migration with idempotent `back` compatibility for
+  every existing row.
+- [ ] Update `lib/server.ts` create, accept, state-query, revision, audit, and
+  settlement paths to persist and consume the immutable position while
+  preserving the existing single-winner transaction guards.
+- [ ] Add the responsive, keyboard-accessible Back/Fade composer control and
+  reset behavior in `app/BettingApp.tsx` and `app/globals.css`, including
+  complete disabled, pending, success, error, and stale-state handling.
+- [ ] Update offer cards, acceptance calls to action, My Bets, proposed-term
+  comparisons, participant ribbons, and revision history with explicit
+  participant roles and winning-condition copy.
+- [ ] Extend `lib/notion-export-repository.ts`, `lib/notion-export.ts`, archive
+  setup/reconciliation scripts, and their tests with active position, winning
+  rule, and before/after revision history while preserving redaction and
+  idempotent hashes.
+- [ ] Update `README.md`, `CONTRIBUTING.md`, and the top-level parlay invariants
+  in this plan after implementation so contributors cannot model Fade by
+  reversing each leg.
+- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect the
+  generated SQL and packaged Worker for an additive migration and no secrets.
+- [ ] Exercise separate maker and taker identities against a multi-leg Back
+  offer, a multi-leg Fade offer, a money-only counteroffer, and a mutually
+  approved position revision, including early settlement and void cases.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  verify the production D1 backfill and Notion reconciliation, then confirm the
+  public app returns successfully with no new Worker errors.
+
+Acceptance:
+
+- A creator can post a multi-leg parlay while backing it or fading it.
+- A friend accepting a Fade offer backs the selected AND proposition; they win
+  only if every non-void leg hits.
+- A Fade participant wins as soon as any active selected leg misses.
+- Back and Fade are exact complements for every resolved, pending, and void
+  truth-table case, so both participants can never win or lose simultaneously.
+- Straight bets continue to behave exactly as before.
+- Counteroffers cannot change position, while a matched-bet position changes
+  only after explicit approval from the other participant.
+- Existing offers, bets, debts, and revision histories preserve their original
+  maker-backed meaning.
+- Risk amounts stay attached to people and remain exact after voided legs or a
+  mutually approved position switch.
+- Every offer, bet, revision, audit entry, and Notion record makes both sides
+  and their winning conditions unambiguous.
+- Concurrent acceptance, revision, and resolution requests never create
+  partial terms, contradictory results, or duplicate debts.
+- Existing authentication, market editing, counteroffer decline, settlement,
+  weekly export, and public-audit behavior continues to pass.
 
 ## Required verification
 
