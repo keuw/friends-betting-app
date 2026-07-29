@@ -3,6 +3,7 @@ import type {
   BetRevisionStatus,
   BetStatus,
   MarketStatus,
+  ParlayPosition,
   Selection,
 } from "@/lib/contracts";
 import type {
@@ -21,6 +22,7 @@ type ExportBetRow = {
   bet_id: string;
   maker_name: string;
   taker_name: string;
+  maker_position: ParlayPosition;
   maker_risk_cents: number;
   taker_risk_cents: number;
   status: BetStatus;
@@ -36,6 +38,7 @@ type ExportRevisionRow = {
   revision_number: number;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  maker_position: ParlayPosition;
   proposer_name: string;
   recipient_name: string;
   status: BetRevisionStatus;
@@ -120,6 +123,7 @@ export class D1ExportRepository implements ExportRepository {
            taker.display_name AS taker_name,
            active.maker_risk_cents,
            active.taker_risk_cents,
+           active.maker_position,
            b.status,
            b.accepted_at,
            b.settled_at,
@@ -138,6 +142,7 @@ export class D1ExportRepository implements ExportRepository {
            br.revision_number,
            br.maker_risk_cents,
            br.taker_risk_cents,
+           br.maker_position,
            proposer.display_name AS proposer_name,
            recipient.display_name AS recipient_name,
            br.status,
@@ -185,6 +190,7 @@ export class D1ExportRepository implements ExportRepository {
         betId: bet.bet_id,
         makerName: bet.maker_name,
         takerName: bet.taker_name,
+        makerPosition: bet.maker_position,
         makerRiskCents: bet.maker_risk_cents,
         takerRiskCents: bet.taker_risk_cents,
         status: bet.status,
@@ -194,6 +200,7 @@ export class D1ExportRepository implements ExportRepository {
         legs: activeLegRows.map(toExportLeg),
         revisions: revisionRows.map((revision) => ({
           revisionNumber: revision.revision_number,
+          makerPosition: revision.maker_position,
           makerRiskCents: revision.maker_risk_cents,
           takerRiskCents: revision.taker_risk_cents,
           proposerName: revision.proposer_name,

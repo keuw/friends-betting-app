@@ -1,6 +1,7 @@
 import type {
   BetRevisionStatus,
   BetStatus,
+  ParlayPosition,
   Selection,
 } from "@/lib/contracts";
 
@@ -18,6 +19,7 @@ export type MatchedBetExportLeg = {
 
 export type MatchedBetExportRevision = {
   revisionNumber: number;
+  makerPosition: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   proposerName: string;
@@ -33,6 +35,7 @@ export type MatchedBetExport = {
   betId: string;
   makerName: string;
   takerName: string;
+  makerPosition: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   status: BetStatus;
@@ -273,6 +276,10 @@ export function notionPropertiesForBet(
       type: "number",
       number: sanitized.takerRiskCents / 100,
     },
+    "Maker Position": {
+      type: "select",
+      select: { name: sanitized.makerPosition },
+    },
     Status: { type: "select", select: { name: sanitized.status } },
     "Matched At": {
       type: "date",
@@ -288,7 +295,7 @@ export function notionPropertiesForBet(
     "Leg Count": { type: "number", number: sanitized.legs.length },
     "Active Terms": richText(renderActiveTerms(sanitized)),
     Legs: richText(renderLegs(sanitized.legs)),
-    "Revision History": richText(renderRevisionHistory(sanitized.revisions)),
+    "Revision History": richText(renderRevisionHistory(sanitized)),
     "Last Exported": {
       type: "date",
       date: { start: exportedAt },
@@ -378,10 +385,14 @@ function compareLegs(
 }
 
 function renderActiveTerms(bet: MatchedBetExport): string {
+  const makerName = narrativeName(bet.makerName, "Maker");
+  const takerName = narrativeName(bet.takerName, "Taker");
   return [
     `Revision ${bet.activeRevisionNumber}`,
     `${bet.makerName} risks ${formatDollars(bet.makerRiskCents)}`,
     `${bet.takerName} risks ${formatDollars(bet.takerRiskCents)}`,
+    positionSummary(makerName, takerName, bet.makerPosition),
+    winningRule(makerName, takerName, bet.makerPosition),
   ].join("\n");
 }
 
@@ -394,7 +405,7 @@ function renderLegs(legs: MatchedBetExportLeg[]): string {
       (leg, index) =>
         [
           `${index + 1}. ${leg.question}`,
-          `Maker picked ${leg.makerSelectionLabel} (${leg.makerSelection.toUpperCase()})`,
+          `Parlay pick: ${leg.makerSelectionLabel} (${leg.makerSelection.toUpperCase()})`,
           `Market revision ${leg.marketRevisionNumber}`,
           `Closes ${leg.closesAt}`,
           `Result: ${leg.result}`,
@@ -404,24 +415,63 @@ function renderLegs(legs: MatchedBetExportLeg[]): string {
 }
 
 function renderRevisionHistory(
-  revisions: MatchedBetExportRevision[],
+  bet: MatchedBetExport,
 ): string {
+  const revisions = bet.revisions;
   if (revisions.length === 0) {
     return "No revision history recorded.";
   }
   return revisions
-    .map((revision) =>
-      [
+    .map((revision, index) => {
+      const previous = revisions[index - 1];
+      const makerName = narrativeName(bet.makerName, "Maker");
+      const takerName = narrativeName(bet.takerName, "Taker");
+      return [
         `Revision ${revision.revisionNumber} — ${revision.status}`,
         `${revision.proposerName} proposed to ${revision.recipientName}`,
         `${formatDollars(revision.makerRiskCents)} maker risk / ${formatDollars(revision.takerRiskCents)} taker risk`,
+        previous
+          ? `${makerName}: ${positionLabel(previous.makerPosition)} → ${positionLabel(revision.makerPosition)}; ${takerName}: ${positionLabel(oppositePosition(previous.makerPosition))} → ${positionLabel(oppositePosition(revision.makerPosition))}`
+          : `${makerName}: ${positionLabel(revision.makerPosition)}; ${takerName}: ${positionLabel(oppositePosition(revision.makerPosition))}`,
         `Created ${revision.createdAt}`,
         `Responded ${revision.respondedAt ?? "not yet"}`,
         `Note: ${revision.changeNote}`,
         renderLegs(revision.legs),
-      ].join("\n"),
-    )
+      ].join("\n");
+    })
     .join("\n\n");
+}
+
+function positionSummary(
+  makerName: string,
+  takerName: string,
+  makerPosition: ParlayPosition,
+): string {
+  return makerPosition === "back"
+    ? `${makerName} backs this parlay; ${takerName} fades this parlay.`
+    : `${makerName} fades this parlay; ${takerName} backs this parlay.`;
+}
+
+function winningRule(
+  makerName: string,
+  takerName: string,
+  makerPosition: ParlayPosition,
+): string {
+  return makerPosition === "back"
+    ? `${makerName} wins if every non-void pick hits; ${takerName} wins if any pick misses.`
+    : `${makerName} wins if any pick misses; ${takerName} wins if every non-void pick hits.`;
+}
+
+function positionLabel(position: ParlayPosition): string {
+  return position === "back" ? "Back" : "Fade";
+}
+
+function oppositePosition(position: ParlayPosition): ParlayPosition {
+  return position === "back" ? "fade" : "back";
+}
+
+function narrativeName(value: string, fallback: string): string {
+  return value.replace(/\s*\[redacted\]\s*/gu, " ").trim() || fallback;
 }
 
 function formatDollars(cents: number): string {

@@ -40,6 +40,12 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - One root offer can create at most one matched bet.
 - Offers and counteroffers never reserve funds.
 - Accepting any branch consumes the root offer.
+- Multi-leg selections always define one AND proposition. `back` means the
+  original maker takes that proposition; `fade` means the maker wins if any
+  selected leg misses. Never implement Fade by reversing duplicate legs.
+- Counteroffers inherit the immutable root Back/Fade position and change money
+  terms only. Matched-bet position changes are append-only revisions requiring
+  acceptance by the other participant.
 - Only the current recipient may accept, counter, or decline a pending
   counteroffer. Those transitions must recheck the pending state atomically so
   exactly one wins; declining leaves the root offer open.

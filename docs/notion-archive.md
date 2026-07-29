@@ -47,8 +47,21 @@ offline settlements, and the complete audit ledger remain in D1 only.
    token.
 
 The schema contains: Bet, Sidebet Bet ID, Maker, Taker, Maker Risk, Taker Risk,
-Status, Matched At, Settled At, Active Revision, Leg Count, Active Terms, Legs,
-Revision History, Last Exported, and Sidebet URL.
+Maker Position, Status, Matched At, Settled At, Active Revision, Leg Count,
+Active Terms, Legs, Revision History, Last Exported, and Sidebet URL.
+
+After pulling a release that adds archive fields, reconcile an existing data
+source before triggering the export:
+
+```bash
+export NOTION_DATA_SOURCE_ID="the-data-source-id"
+NOTION_TOKEN="$(security find-generic-password -a "$USER" -s sidebet-notion-token -w)" \
+  npm run notion:reconcile-schema
+unset NOTION_DATA_SOURCE_ID
+```
+
+The reconciliation is additive and prints only the data-source ID and property
+names.
 
 ## Deployment
 

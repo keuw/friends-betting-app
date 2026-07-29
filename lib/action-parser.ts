@@ -1,4 +1,4 @@
-import type { AppAction, Selection } from "./contracts";
+import type { AppAction, ParlayPosition, Selection } from "./contracts";
 import { isValidMoneyTerm } from "./domain";
 
 const MAX_TEXT_LENGTH = 500;
@@ -45,6 +45,7 @@ export function parseAppAction(input: unknown): AppAction {
     case "create_offer":
       return {
         type,
+        makerPosition: optionalParlayPosition(record.makerPosition) ?? "back",
         makerRiskCents: requiredMoney(record.makerRiskCents, "makerRiskCents"),
         takerRiskCents: requiredMoney(record.takerRiskCents, "takerRiskCents"),
         legs: requiredLegs(record.legs),
@@ -95,6 +96,7 @@ export function parseAppAction(input: unknown): AppAction {
       return {
         type,
         betId: requiredId(record.betId, "betId"),
+        makerPosition: optionalParlayPosition(record.makerPosition),
         makerRiskCents: requiredMoney(record.makerRiskCents, "makerRiskCents"),
         takerRiskCents: requiredMoney(record.takerRiskCents, "takerRiskCents"),
         changeNote: requiredString(record.changeNote, "changeNote"),
@@ -194,6 +196,20 @@ function requiredId(value: unknown, field: string): string {
 function optionalId(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   return requiredId(value, field);
+}
+
+function optionalParlayPosition(
+  value: unknown,
+): ParlayPosition | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (value !== "back" && value !== "fade") {
+    throw new AppError(
+      400,
+      "INVALID_POSITION",
+      "Choose whether to back or fade the parlay.",
+    );
+  }
+  return value;
 }
 
 function requiredMoney(value: unknown, field: string): number {

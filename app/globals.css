@@ -794,6 +794,67 @@ button.brand-lockup {
   color: var(--danger);
 }
 
+.position-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--cream);
+}
+
+.position-selector > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.position-selector > div > span {
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.58rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.position-selector [role="group"] {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.position-selector button {
+  min-height: 2.4rem;
+  padding: 0.55rem 0.7rem;
+  border-color: var(--line);
+  background: var(--paper);
+  font-size: 0.65rem;
+}
+
+.position-selector button.selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.position-selector > p {
+  max-width: 15rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.position-selector.compact {
+  margin-bottom: 0.8rem;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
 .market-browser-tools {
   padding: 0.9rem 1.25rem 0.7rem;
   border-bottom: 1px solid var(--line);
@@ -1180,6 +1241,22 @@ button.brand-lockup {
   background: var(--cream);
 }
 
+.offer-badges .position-badge {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.offer-badges .position-fade {
+  background: var(--coral);
+}
+
+.offer-badges .position-back {
+  background: var(--acid);
+}
+
 .offer-badges b {
   background: var(--acid);
 }
@@ -1212,6 +1289,17 @@ button.brand-lockup {
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.7rem;
   text-align: right;
+}
+
+.position-rule {
+  margin: 0;
+  padding: 0.75rem 1.2rem;
+  border-top: 1px dashed var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--cream);
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.5;
 }
 
 .offer-stakes {
@@ -1504,6 +1592,25 @@ button.brand-lockup {
   font-weight: 400;
 }
 
+.bet-position-summary {
+  margin: -0.35rem 0 0.85rem;
+  padding: 0.65rem;
+  border-left: 3px solid var(--blue);
+  background: var(--surface-info);
+}
+
+.bet-position-summary strong {
+  display: block;
+  font-size: 0.67rem;
+}
+
+.bet-position-summary p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
 .bet-leg-list {
   display: flex;
   min-height: 7rem;
@@ -1668,6 +1775,13 @@ button.brand-lockup {
 .bet-terms-summary > strong,
 .bet-terms-summary > small {
   display: block;
+}
+
+.terms-position-rule {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.4;
 }
 
 .bet-terms-summary > strong {
@@ -1843,6 +1957,15 @@ button.brand-lockup {
   margin-bottom: 0.6rem;
   color: var(--muted);
   font-size: 0.56rem;
+}
+
+.revision-history-row .revision-position-change {
+  margin: 0 0 0.6rem;
+  padding: 0.45rem 0.55rem;
+  border-left: 2px solid var(--coral);
+  background: var(--paper);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
 }
 
 .participant-ribbon {
@@ -2671,6 +2794,20 @@ button.brand-lockup {
 
   .selected-slip-list {
     max-height: 12rem;
+  }
+
+  .position-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .position-selector [role="group"] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .position-selector > p {
+    max-width: none;
   }
 
   .offer-card-head {

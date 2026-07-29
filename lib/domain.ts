@@ -42,9 +42,12 @@ export function americanOdds(riskCents: number, profitCents: number): number {
   return -Math.round((riskCents / profitCents) * 100);
 }
 
-export function gradeParlay(results: readonly LegResult[]): BetResult {
+export function gradeParlay(
+  results: readonly LegResult[],
+  makerPosition: ParlayPosition = "back",
+): BetResult {
   if (results.some((result) => result === "lost")) {
-    return "taker_won";
+    return makerPosition === "back" ? "taker_won" : "maker_won";
   }
 
   const activeResults = results.filter((result) => result !== "void");
@@ -56,7 +59,7 @@ export function gradeParlay(results: readonly LegResult[]): BetResult {
     return "pending";
   }
 
-  return "maker_won";
+  return makerPosition === "back" ? "maker_won" : "taker_won";
 }
 
 export function canAmendBet(
@@ -146,3 +149,4 @@ function addSignedPairAmount(
 
   balances.set(key, (balances.get(key) ?? 0) + direction * amountCents);
 }
+import type { ParlayPosition } from "./contracts";

@@ -25,8 +25,12 @@ test(
       const taker = user("Fade Taker", stamp);
       const hitMaker = user("Hit Maker", stamp);
       const hitTaker = user("Hit Taker", stamp);
+      const voidMaker = user("Void Maker", stamp);
+      const voidTaker = user("Void Taker", stamp);
       const editorMaker = user("Editor Maker", stamp);
       const editorTaker = user("Editor Taker", stamp);
+      const raceMaker = user("Revision Race Maker", stamp);
+      const raceTaker = user("Revision Race Taker", stamp);
 
       const invalidMarket = await createMarket(
         baseUrl,
@@ -138,6 +142,49 @@ test(
         1_000,
       );
 
+      const voidMarkets = await createMarkets(
+        baseUrl,
+        voidMaker,
+        `Fade all void ${stamp}`,
+      );
+      const voidOffer = await createOffer(
+        baseUrl,
+        voidMaker,
+        voidMarkets,
+        "fade",
+      );
+      const voidAcceptance = await postAction(baseUrl, voidTaker, {
+        type: "accept_offer",
+        offerId: voidOffer.id,
+      });
+      assert.equal(voidAcceptance.status, 200);
+      const firstVoid = await resolve(
+        baseUrl,
+        voidMaker,
+        voidMarkets[0],
+        "void",
+      );
+      assert.equal(firstVoid.status, 200);
+      assert.equal(betForMarkets(firstVoid.payload, voidMarkets).status, "pending");
+      const allVoid = await resolve(
+        baseUrl,
+        voidMaker,
+        voidMarkets[1],
+        "void",
+      );
+      assert.equal(allVoid.status, 200);
+      assert.equal(betForMarkets(allVoid.payload, voidMarkets).status, "void");
+      assert.equal(
+        allVoid.payload.pairBalances.some(
+          (balance) =>
+            balance.debtorName === voidMaker.name ||
+            balance.creditorName === voidMaker.name ||
+            balance.debtorName === voidTaker.name ||
+            balance.creditorName === voidTaker.name,
+        ),
+        false,
+      );
+
       const editMarkets = await createMarkets(
         baseUrl,
         editorMaker,
@@ -192,6 +239,69 @@ test(
       );
       assert.equal(revisedBet.makerRiskCents, originalBet.makerRiskCents);
       assert.equal(revisedBet.takerRiskCents, originalBet.takerRiskCents);
+
+      const raceMarkets = await createMarkets(
+        baseUrl,
+        raceMaker,
+        `Position resolution race ${stamp}`,
+      );
+      const raceOffer = await createOffer(
+        baseUrl,
+        raceMaker,
+        raceMarkets,
+        "back",
+      );
+      const raceAcceptance = await postAction(baseUrl, raceTaker, {
+        type: "accept_offer",
+        offerId: raceOffer.id,
+      });
+      assert.equal(raceAcceptance.status, 200);
+      const raceBet = betForMarkets(raceAcceptance.payload, raceMarkets);
+      const raceProposal = await postAction(baseUrl, raceMaker, {
+        type: "propose_bet_revision",
+        betId: raceBet.id,
+        makerPosition: "fade",
+        makerRiskCents: raceBet.makerRiskCents,
+        takerRiskCents: raceBet.takerRiskCents,
+        changeNote: "Race position activation with market resolution",
+        legs: raceMarkets.map(leg),
+      });
+      assert.equal(raceProposal.status, 200);
+      const raceRevision = betForMarkets(
+        raceProposal.payload,
+        raceMarkets,
+      ).revisions.find((revision) => revision.status === "pending");
+      assert.ok(raceRevision);
+
+      const [positionActivation, concurrentResolution] = await Promise.all([
+        postAction(baseUrl, raceTaker, {
+          type: "respond_bet_revision",
+          betRevisionId: raceRevision.id,
+          decision: "accepted",
+        }),
+        resolve(baseUrl, raceMaker, raceMarkets[0], "b"),
+      ]);
+      assert.ok([200, 409].includes(positionActivation.status));
+      assert.equal(concurrentResolution.status, 200);
+      const finalRaceState = await getState(baseUrl, raceMaker);
+      const finalRaceBet = betForMarkets(finalRaceState, raceMarkets);
+      const fadeActivated = positionActivation.status === 200;
+      assert.equal(finalRaceBet.makerPosition, fadeActivated ? "fade" : "back");
+      assert.equal(
+        finalRaceBet.status,
+        fadeActivated ? "maker_won" : "taker_won",
+      );
+      const raceBalance = finalRaceState.pairBalances.find(
+        (balance) =>
+          balance.debtorName ===
+            (fadeActivated ? raceTaker.name : raceMaker.name) &&
+          balance.creditorName ===
+            (fadeActivated ? raceMaker.name : raceTaker.name),
+      );
+      assert.equal(
+        raceBalance?.amountCents,
+        fadeActivated ? raceBet.takerRiskCents : raceBet.makerRiskCents,
+      );
     } finally {
       await stopDevServer(server);
     }
@@ -277,6 +387,14 @@ async function postAction(baseUrl, actor, body) {
     status: response.status,
     payload: await response.json(),
   };
+}
+
+async function getState(baseUrl, actor) {
+  const response = await fetch(`${baseUrl}/api/state`, {
+    headers: identityHeaders(actor, false),
+  });
+  assert.equal(response.status, 200);
+  return response.json();
 }
 
 function identityHeaders(actor, includeContentType = true) {

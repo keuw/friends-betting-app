@@ -112,6 +112,7 @@ export const offers = sqliteTable(
       .references(() => users.id),
     makerRiskCents: integer("maker_risk_cents").notNull(),
     takerRiskCents: integer("taker_risk_cents").notNull(),
+    makerPosition: text("maker_position").notNull().default("back"),
     status: text("status").notNull().default("open"),
     acceptedByUserId: text("accepted_by_user_id").references(() => users.id),
     acceptedCounterId: text("accepted_counter_id"),
@@ -128,6 +129,10 @@ export const offers = sqliteTable(
     ),
     check("offers_maker_risk_check", sql`${table.makerRiskCents} > 0`),
     check("offers_taker_risk_check", sql`${table.takerRiskCents} > 0`),
+    check(
+      "offers_maker_position_check",
+      sql`${table.makerPosition} IN ('back', 'fade')`,
+    ),
   ],
 );
 
@@ -256,6 +261,7 @@ export const betRevisions = sqliteTable(
     revisionNumber: integer("revision_number").notNull(),
     makerRiskCents: integer("maker_risk_cents").notNull(),
     takerRiskCents: integer("taker_risk_cents").notNull(),
+    makerPosition: text("maker_position").notNull().default("back"),
     proposerUserId: text("proposer_user_id")
       .notNull()
       .references(() => users.id),
@@ -294,6 +300,10 @@ export const betRevisions = sqliteTable(
     check(
       "bet_revisions_taker_risk_check",
       sql`${table.takerRiskCents} > 0`,
+    ),
+    check(
+      "bet_revisions_maker_position_check",
+      sql`${table.makerPosition} IN ('back', 'fade')`,
     ),
     check(
       "bet_revisions_number_check",

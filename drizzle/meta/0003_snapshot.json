@@ -1,0 +1,1783 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "b06fb8a8-68f6-4694-b312-f5f70c74c0e2",
+  "prevId": "1077c6df-6cab-4b67-a5f9-1f435a77701f",
+  "tables": {
+    "audit_events": {
+      "name": "audit_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "metadata_json": {
+          "name": "metadata_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "audit_entity_idx": {
+          "name": "audit_entity_idx",
+          "columns": [
+            "entity_type",
+            "entity_id"
+          ],
+          "isUnique": false
+        },
+        "audit_created_idx": {
+          "name": "audit_created_idx",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "audit_events_actor_user_id_users_id_fk": {
+          "name": "audit_events_actor_user_id_users_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "bet_revision_legs": {
+      "name": "bet_revision_legs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bet_revision_id": {
+          "name": "bet_revision_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "market_id": {
+          "name": "market_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "market_revision_id": {
+          "name": "market_revision_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_selection": {
+          "name": "maker_selection",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bet_revision_legs_revision_market_unique": {
+          "name": "bet_revision_legs_revision_market_unique",
+          "columns": [
+            "bet_revision_id",
+            "market_id"
+          ],
+          "isUnique": true
+        },
+        "bet_revision_legs_market_revision_idx": {
+          "name": "bet_revision_legs_market_revision_idx",
+          "columns": [
+            "market_revision_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "bet_revision_legs_bet_revision_id_bet_revisions_id_fk": {
+          "name": "bet_revision_legs_bet_revision_id_bet_revisions_id_fk",
+          "tableFrom": "bet_revision_legs",
+          "tableTo": "bet_revisions",
+          "columnsFrom": [
+            "bet_revision_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bet_revision_legs_market_id_markets_id_fk": {
+          "name": "bet_revision_legs_market_id_markets_id_fk",
+          "tableFrom": "bet_revision_legs",
+          "tableTo": "markets",
+          "columnsFrom": [
+            "market_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bet_revision_legs_market_revision_id_market_revisions_id_fk": {
+          "name": "bet_revision_legs_market_revision_id_market_revisions_id_fk",
+          "tableFrom": "bet_revision_legs",
+          "tableTo": "market_revisions",
+          "columnsFrom": [
+            "market_revision_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bet_revision_legs_selection_check": {
+          "name": "bet_revision_legs_selection_check",
+          "value": "\"bet_revision_legs\".\"maker_selection\" IN ('a', 'b')"
+        }
+      }
+    },
+    "bet_revisions": {
+      "name": "bet_revisions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bet_id": {
+          "name": "bet_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision_number": {
+          "name": "revision_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_risk_cents": {
+          "name": "maker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taker_risk_cents": {
+          "name": "taker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_position": {
+          "name": "maker_position",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'back'"
+        },
+        "proposer_user_id": {
+          "name": "proposer_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient_user_id": {
+          "name": "recipient_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "change_note": {
+          "name": "change_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "responded_at": {
+          "name": "responded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bet_revisions_bet_number_unique": {
+          "name": "bet_revisions_bet_number_unique",
+          "columns": [
+            "bet_id",
+            "revision_number"
+          ],
+          "isUnique": true
+        },
+        "bet_revisions_one_pending": {
+          "name": "bet_revisions_one_pending",
+          "columns": [
+            "bet_id"
+          ],
+          "isUnique": true,
+          "where": "\"bet_revisions\".\"status\" = 'pending'"
+        },
+        "bet_revisions_one_active": {
+          "name": "bet_revisions_one_active",
+          "columns": [
+            "bet_id"
+          ],
+          "isUnique": true,
+          "where": "\"bet_revisions\".\"status\" = 'active'"
+        },
+        "bet_revisions_bet_created_idx": {
+          "name": "bet_revisions_bet_created_idx",
+          "columns": [
+            "bet_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "bet_revisions_bet_id_bets_id_fk": {
+          "name": "bet_revisions_bet_id_bets_id_fk",
+          "tableFrom": "bet_revisions",
+          "tableTo": "bets",
+          "columnsFrom": [
+            "bet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bet_revisions_proposer_user_id_users_id_fk": {
+          "name": "bet_revisions_proposer_user_id_users_id_fk",
+          "tableFrom": "bet_revisions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "proposer_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bet_revisions_recipient_user_id_users_id_fk": {
+          "name": "bet_revisions_recipient_user_id_users_id_fk",
+          "tableFrom": "bet_revisions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "recipient_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bet_revisions_status_check": {
+          "name": "bet_revisions_status_check",
+          "value": "\"bet_revisions\".\"status\" IN ('active', 'pending', 'rejected', 'cancelled', 'superseded')"
+        },
+        "bet_revisions_participants_check": {
+          "name": "bet_revisions_participants_check",
+          "value": "\"bet_revisions\".\"proposer_user_id\" <> \"bet_revisions\".\"recipient_user_id\""
+        },
+        "bet_revisions_maker_risk_check": {
+          "name": "bet_revisions_maker_risk_check",
+          "value": "\"bet_revisions\".\"maker_risk_cents\" > 0"
+        },
+        "bet_revisions_taker_risk_check": {
+          "name": "bet_revisions_taker_risk_check",
+          "value": "\"bet_revisions\".\"taker_risk_cents\" > 0"
+        },
+        "bet_revisions_maker_position_check": {
+          "name": "bet_revisions_maker_position_check",
+          "value": "\"bet_revisions\".\"maker_position\" IN ('back', 'fade')"
+        },
+        "bet_revisions_number_check": {
+          "name": "bet_revisions_number_check",
+          "value": "\"bet_revisions\".\"revision_number\" > 0"
+        }
+      }
+    },
+    "bets": {
+      "name": "bets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "offer_id": {
+          "name": "offer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_user_id": {
+          "name": "maker_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taker_user_id": {
+          "name": "taker_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_risk_cents": {
+          "name": "maker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taker_risk_cents": {
+          "name": "taker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accepted_counter_id": {
+          "name": "accepted_counter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "current_revision_id": {
+          "name": "current_revision_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bets_offer_unique": {
+          "name": "bets_offer_unique",
+          "columns": [
+            "offer_id"
+          ],
+          "isUnique": true
+        },
+        "bets_maker_idx": {
+          "name": "bets_maker_idx",
+          "columns": [
+            "maker_user_id",
+            "accepted_at"
+          ],
+          "isUnique": false
+        },
+        "bets_taker_idx": {
+          "name": "bets_taker_idx",
+          "columns": [
+            "taker_user_id",
+            "accepted_at"
+          ],
+          "isUnique": false
+        },
+        "bets_status_idx": {
+          "name": "bets_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "bets_offer_id_offers_id_fk": {
+          "name": "bets_offer_id_offers_id_fk",
+          "tableFrom": "bets",
+          "tableTo": "offers",
+          "columnsFrom": [
+            "offer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bets_maker_user_id_users_id_fk": {
+          "name": "bets_maker_user_id_users_id_fk",
+          "tableFrom": "bets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "maker_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "bets_taker_user_id_users_id_fk": {
+          "name": "bets_taker_user_id_users_id_fk",
+          "tableFrom": "bets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "taker_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bets_status_check": {
+          "name": "bets_status_check",
+          "value": "\"bets\".\"status\" IN ('pending', 'maker_won', 'taker_won', 'void')"
+        },
+        "bets_participants_check": {
+          "name": "bets_participants_check",
+          "value": "\"bets\".\"maker_user_id\" <> \"bets\".\"taker_user_id\""
+        }
+      }
+    },
+    "counteroffers": {
+      "name": "counteroffers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "root_offer_id": {
+          "name": "root_offer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parent_counter_id": {
+          "name": "parent_counter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "challenger_user_id": {
+          "name": "challenger_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "proposer_user_id": {
+          "name": "proposer_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient_user_id": {
+          "name": "recipient_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_risk_cents": {
+          "name": "maker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taker_risk_cents": {
+          "name": "taker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "counteroffers_root_created_idx": {
+          "name": "counteroffers_root_created_idx",
+          "columns": [
+            "root_offer_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "counteroffers_recipient_idx": {
+          "name": "counteroffers_recipient_idx",
+          "columns": [
+            "recipient_user_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "counteroffers_root_offer_id_offers_id_fk": {
+          "name": "counteroffers_root_offer_id_offers_id_fk",
+          "tableFrom": "counteroffers",
+          "tableTo": "offers",
+          "columnsFrom": [
+            "root_offer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "counteroffers_challenger_user_id_users_id_fk": {
+          "name": "counteroffers_challenger_user_id_users_id_fk",
+          "tableFrom": "counteroffers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "challenger_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "counteroffers_proposer_user_id_users_id_fk": {
+          "name": "counteroffers_proposer_user_id_users_id_fk",
+          "tableFrom": "counteroffers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "proposer_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "counteroffers_recipient_user_id_users_id_fk": {
+          "name": "counteroffers_recipient_user_id_users_id_fk",
+          "tableFrom": "counteroffers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "recipient_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "counteroffers_status_check": {
+          "name": "counteroffers_status_check",
+          "value": "\"counteroffers\".\"status\" IN ('pending', 'accepted', 'superseded')"
+        },
+        "counteroffers_participants_check": {
+          "name": "counteroffers_participants_check",
+          "value": "\"counteroffers\".\"proposer_user_id\" <> \"counteroffers\".\"recipient_user_id\""
+        },
+        "counteroffers_maker_risk_check": {
+          "name": "counteroffers_maker_risk_check",
+          "value": "\"counteroffers\".\"maker_risk_cents\" > 0"
+        },
+        "counteroffers_taker_risk_check": {
+          "name": "counteroffers_taker_risk_check",
+          "value": "\"counteroffers\".\"taker_risk_cents\" > 0"
+        }
+      }
+    },
+    "debts": {
+      "name": "debts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bet_id": {
+          "name": "bet_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "debtor_user_id": {
+          "name": "debtor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "creditor_user_id": {
+          "name": "creditor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "debts_bet_unique": {
+          "name": "debts_bet_unique",
+          "columns": [
+            "bet_id"
+          ],
+          "isUnique": true
+        },
+        "debts_debtor_creditor_idx": {
+          "name": "debts_debtor_creditor_idx",
+          "columns": [
+            "debtor_user_id",
+            "creditor_user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "debts_bet_id_bets_id_fk": {
+          "name": "debts_bet_id_bets_id_fk",
+          "tableFrom": "debts",
+          "tableTo": "bets",
+          "columnsFrom": [
+            "bet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "debts_debtor_user_id_users_id_fk": {
+          "name": "debts_debtor_user_id_users_id_fk",
+          "tableFrom": "debts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "debtor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "debts_creditor_user_id_users_id_fk": {
+          "name": "debts_creditor_user_id_users_id_fk",
+          "tableFrom": "debts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "creditor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "debts_amount_check": {
+          "name": "debts_amount_check",
+          "value": "\"debts\".\"amount_cents\" > 0"
+        },
+        "debts_participants_check": {
+          "name": "debts_participants_check",
+          "value": "\"debts\".\"debtor_user_id\" <> \"debts\".\"creditor_user_id\""
+        }
+      }
+    },
+    "market_revisions": {
+      "name": "market_revisions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "market_id": {
+          "name": "market_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision_number": {
+          "name": "revision_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "question": {
+          "name": "question",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "selection_a": {
+          "name": "selection_a",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "selection_b": {
+          "name": "selection_b",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closes_at": {
+          "name": "closes_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "winning_selection": {
+          "name": "winning_selection",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "editor_user_id": {
+          "name": "editor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "change_note": {
+          "name": "change_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "market_revisions_market_number_unique": {
+          "name": "market_revisions_market_number_unique",
+          "columns": [
+            "market_id",
+            "revision_number"
+          ],
+          "isUnique": true
+        },
+        "market_revisions_market_created_idx": {
+          "name": "market_revisions_market_created_idx",
+          "columns": [
+            "market_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "market_revisions_status_closes_idx": {
+          "name": "market_revisions_status_closes_idx",
+          "columns": [
+            "status",
+            "closes_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "market_revisions_market_id_markets_id_fk": {
+          "name": "market_revisions_market_id_markets_id_fk",
+          "tableFrom": "market_revisions",
+          "tableTo": "markets",
+          "columnsFrom": [
+            "market_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "market_revisions_editor_user_id_users_id_fk": {
+          "name": "market_revisions_editor_user_id_users_id_fk",
+          "tableFrom": "market_revisions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "editor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "market_revisions_status_check": {
+          "name": "market_revisions_status_check",
+          "value": "\"market_revisions\".\"status\" IN ('open', 'resolved', 'void')"
+        },
+        "market_revisions_winning_selection_check": {
+          "name": "market_revisions_winning_selection_check",
+          "value": "\"market_revisions\".\"winning_selection\" IS NULL OR \"market_revisions\".\"winning_selection\" IN ('a', 'b')"
+        },
+        "market_revisions_number_check": {
+          "name": "market_revisions_number_check",
+          "value": "\"market_revisions\".\"revision_number\" > 0"
+        }
+      }
+    },
+    "markets": {
+      "name": "markets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "question": {
+          "name": "question",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "selection_a": {
+          "name": "selection_a",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "selection_b": {
+          "name": "selection_b",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closes_at": {
+          "name": "closes_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "winning_selection": {
+          "name": "winning_selection",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "creator_user_id": {
+          "name": "creator_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_revision_id": {
+          "name": "current_revision_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "markets_status_closes_idx": {
+          "name": "markets_status_closes_idx",
+          "columns": [
+            "status",
+            "closes_at"
+          ],
+          "isUnique": false
+        },
+        "markets_creator_idx": {
+          "name": "markets_creator_idx",
+          "columns": [
+            "creator_user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "markets_creator_user_id_users_id_fk": {
+          "name": "markets_creator_user_id_users_id_fk",
+          "tableFrom": "markets",
+          "tableTo": "users",
+          "columnsFrom": [
+            "creator_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "markets_status_check": {
+          "name": "markets_status_check",
+          "value": "\"markets\".\"status\" IN ('open', 'resolved', 'void')"
+        },
+        "markets_winning_selection_check": {
+          "name": "markets_winning_selection_check",
+          "value": "\"markets\".\"winning_selection\" IS NULL OR \"markets\".\"winning_selection\" IN ('a', 'b')"
+        }
+      }
+    },
+    "notion_bet_exports": {
+      "name": "notion_bet_exports",
+      "columns": {
+        "bet_id": {
+          "name": "bet_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notion_page_id": {
+          "name": "notion_page_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_exported_at": {
+          "name": "last_exported_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "notion_bet_exports_page_unique": {
+          "name": "notion_bet_exports_page_unique",
+          "columns": [
+            "notion_page_id"
+          ],
+          "isUnique": true,
+          "where": "\"notion_bet_exports\".\"notion_page_id\" IS NOT NULL"
+        }
+      },
+      "foreignKeys": {
+        "notion_bet_exports_bet_id_bets_id_fk": {
+          "name": "notion_bet_exports_bet_id_bets_id_fk",
+          "tableFrom": "notion_bet_exports",
+          "tableTo": "bets",
+          "columnsFrom": [
+            "bet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "notion_export_runs": {
+      "name": "notion_export_runs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'running'"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scanned_count": {
+          "name": "scanned_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_count": {
+          "name": "created_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "updated_count": {
+          "name": "updated_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "unchanged_count": {
+          "name": "unchanged_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "failed_count": {
+          "name": "failed_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "notion_export_runs_one_running": {
+          "name": "notion_export_runs_one_running",
+          "columns": [
+            "status"
+          ],
+          "isUnique": true,
+          "where": "\"notion_export_runs\".\"status\" = 'running'"
+        },
+        "notion_export_runs_started_idx": {
+          "name": "notion_export_runs_started_idx",
+          "columns": [
+            "started_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "notion_export_runs_status_check": {
+          "name": "notion_export_runs_status_check",
+          "value": "\"notion_export_runs\".\"status\" IN ('running', 'succeeded', 'partial', 'failed')"
+        }
+      }
+    },
+    "offer_legs": {
+      "name": "offer_legs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "offer_id": {
+          "name": "offer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "market_id": {
+          "name": "market_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "market_revision_id": {
+          "name": "market_revision_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "maker_selection": {
+          "name": "maker_selection",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "offer_legs_offer_market_unique": {
+          "name": "offer_legs_offer_market_unique",
+          "columns": [
+            "offer_id",
+            "market_id"
+          ],
+          "isUnique": true
+        },
+        "offer_legs_market_idx": {
+          "name": "offer_legs_market_idx",
+          "columns": [
+            "market_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "offer_legs_offer_id_offers_id_fk": {
+          "name": "offer_legs_offer_id_offers_id_fk",
+          "tableFrom": "offer_legs",
+          "tableTo": "offers",
+          "columnsFrom": [
+            "offer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "offer_legs_market_id_markets_id_fk": {
+          "name": "offer_legs_market_id_markets_id_fk",
+          "tableFrom": "offer_legs",
+          "tableTo": "markets",
+          "columnsFrom": [
+            "market_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "offer_legs_market_revision_id_market_revisions_id_fk": {
+          "name": "offer_legs_market_revision_id_market_revisions_id_fk",
+          "tableFrom": "offer_legs",
+          "tableTo": "market_revisions",
+          "columnsFrom": [
+            "market_revision_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "offer_legs_selection_check": {
+          "name": "offer_legs_selection_check",
+          "value": "\"offer_legs\".\"maker_selection\" IN ('a', 'b')"
+        }
+      }
+    },
+    "offers": {
+      "name": "offers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_user_id": {
+          "name": "maker_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_risk_cents": {
+          "name": "maker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taker_risk_cents": {
+          "name": "taker_risk_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maker_position": {
+          "name": "maker_position",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'back'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "accepted_by_user_id": {
+          "name": "accepted_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "accepted_counter_id": {
+          "name": "accepted_counter_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "offers_status_created_idx": {
+          "name": "offers_status_created_idx",
+          "columns": [
+            "status",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "offers_maker_idx": {
+          "name": "offers_maker_idx",
+          "columns": [
+            "maker_user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "offers_maker_user_id_users_id_fk": {
+          "name": "offers_maker_user_id_users_id_fk",
+          "tableFrom": "offers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "maker_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "offers_accepted_by_user_id_users_id_fk": {
+          "name": "offers_accepted_by_user_id_users_id_fk",
+          "tableFrom": "offers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "accepted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "offers_status_check": {
+          "name": "offers_status_check",
+          "value": "\"offers\".\"status\" IN ('open', 'accepted', 'cancelled', 'expired')"
+        },
+        "offers_maker_risk_check": {
+          "name": "offers_maker_risk_check",
+          "value": "\"offers\".\"maker_risk_cents\" > 0"
+        },
+        "offers_taker_risk_check": {
+          "name": "offers_taker_risk_check",
+          "value": "\"offers\".\"taker_risk_cents\" > 0"
+        },
+        "offers_maker_position_check": {
+          "name": "offers_maker_position_check",
+          "value": "\"offers\".\"maker_position\" IN ('back', 'fade')"
+        }
+      }
+    },
+    "offline_settlements": {
+      "name": "offline_settlements",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "debtor_user_id": {
+          "name": "debtor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "creditor_user_id": {
+          "name": "creditor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "proposed_at": {
+          "name": "proposed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        },
+        "responded_at": {
+          "name": "responded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "settlements_pair_status_idx": {
+          "name": "settlements_pair_status_idx",
+          "columns": [
+            "debtor_user_id",
+            "creditor_user_id",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "offline_settlements_debtor_user_id_users_id_fk": {
+          "name": "offline_settlements_debtor_user_id_users_id_fk",
+          "tableFrom": "offline_settlements",
+          "tableTo": "users",
+          "columnsFrom": [
+            "debtor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "offline_settlements_creditor_user_id_users_id_fk": {
+          "name": "offline_settlements_creditor_user_id_users_id_fk",
+          "tableFrom": "offline_settlements",
+          "tableTo": "users",
+          "columnsFrom": [
+            "creditor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "settlements_status_check": {
+          "name": "settlements_status_check",
+          "value": "\"offline_settlements\".\"status\" IN ('pending', 'confirmed', 'rejected', 'cancelled')"
+        },
+        "settlements_amount_check": {
+          "name": "settlements_amount_check",
+          "value": "\"offline_settlements\".\"amount_cents\" > 0"
+        },
+        "settlements_participants_check": {
+          "name": "settlements_participants_check",
+          "value": "\"offline_settlements\".\"debtor_user_id\" <> \"offline_settlements\".\"creditor_user_id\""
+        }
+      }
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "columns": [
+            "email"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

@@ -11,6 +11,7 @@ const bet = {
   betId: "bet-1",
   makerName: "Alice",
   takerName: "Bob",
+  makerPosition: "back",
   makerRiskCents: 1_000,
   takerRiskCents: 1_500,
   status: "pending",

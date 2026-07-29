@@ -40,6 +40,14 @@ const response = await fetch("https://api.notion.com/v1/databases", {
         Taker: { rich_text: {} },
         "Maker Risk": { number: { format: "dollar" } },
         "Taker Risk": { number: { format: "dollar" } },
+        "Maker Position": {
+          select: {
+            options: [
+              { name: "back", color: "green" },
+              { name: "fade", color: "orange" },
+            ],
+          },
+        },
         Status: {
           select: {
             options: [

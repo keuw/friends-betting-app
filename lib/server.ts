@@ -16,6 +16,7 @@ import type {
   BetStatus,
   MarketStatus,
   OfferStatus,
+  ParlayPosition,
   Selection,
   SettlementStatus,
 } from "@/lib/contracts";
@@ -72,6 +73,7 @@ type OfferRow = {
   maker_name: string;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  maker_position: ParlayPosition;
   status: OfferStatus;
   created_at: string;
   accepted_at: string | null;
@@ -115,6 +117,7 @@ type BetRow = {
   taker_name: string;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  maker_position: ParlayPosition;
   current_revision_id: string;
   status: BetStatus;
   accepted_at: string;
@@ -127,6 +130,7 @@ type BetRevisionRow = {
   revision_number: number;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  maker_position: ParlayPosition;
   proposer_user_id: string;
   proposer_name: string;
   recipient_user_id: string;
@@ -175,6 +179,7 @@ type RootOfferRow = {
   maker_user_id: string;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  maker_position: ParlayPosition;
   status: OfferStatus;
 };
 
@@ -192,10 +197,12 @@ type CounterDetailRow = {
 
 type PendingBetLegRow = {
   bet_id: string;
+  bet_revision_id: string;
   maker_user_id: string;
   taker_user_id: string;
   maker_risk_cents: number;
   taker_risk_cents: number;
+  maker_position: ParlayPosition;
   maker_selection: Selection;
   market_status: MarketStatus;
   winning_selection: Selection | null;
@@ -315,7 +322,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     db.prepare(
       `SELECT b.id, b.offer_id, b.maker_user_id, b.taker_user_id,
               b.current_revision_id, b.status, b.accepted_at, b.settled_at,
-              br.maker_risk_cents, br.taker_risk_cents,
+              br.maker_risk_cents, br.taker_risk_cents, br.maker_position,
               maker.display_name AS maker_name,
               taker.display_name AS taker_name
        FROM bets b
@@ -332,7 +339,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
        FROM bet_revisions br
        JOIN users proposer ON proposer.id = br.proposer_user_id
        JOIN users recipient ON recipient.id = br.recipient_user_id
-       ORDER BY br.bet_id, br.revision_number DESC`,
+       ORDER BY br.bet_id, br.revision_number ASC`,
     ),
     db.prepare(
       `SELECT brl.bet_revision_id, brl.market_id, brl.market_revision_id,
@@ -446,6 +453,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     offers: offerRows.map((offer) => ({
       id: offer.id,
       makerName: offer.maker_name,
+      makerPosition: offer.maker_position,
       makerRiskCents: offer.maker_risk_cents,
       takerRiskCents: offer.taker_risk_cents,
       status: offer.status,
@@ -477,6 +485,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         id: bet.id,
         makerName: bet.maker_name,
         takerName: bet.taker_name,
+        makerPosition: bet.maker_position,
         makerRiskCents: bet.maker_risk_cents,
         takerRiskCents: bet.taker_risk_cents,
         status: bet.status,
@@ -488,6 +497,12 @@ export async function getAppState(user: AppUser): Promise<AppState> {
             ? ("maker" as const)
             : bet.taker_user_id === user.id
               ? ("taker" as const)
+              : null,
+        myPosition:
+          bet.maker_user_id === user.id
+            ? bet.maker_position
+            : bet.taker_user_id === user.id
+              ? oppositePosition(bet.maker_position)
               : null,
         currentRevisionId: bet.current_revision_id,
         canProposeRevision:
@@ -503,6 +518,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         revisions: (revisionsByBet.get(bet.id) ?? []).map((revision) => ({
           id: revision.id,
           revisionNumber: revision.revision_number,
+          makerPosition: revision.maker_position,
           makerRiskCents: revision.maker_risk_cents,
           takerRiskCents: revision.taker_risk_cents,
           proposerName: revision.proposer_name,
@@ -856,6 +872,13 @@ async function createOffer(
   user: AppUser,
   action: Extract<AppAction, { type: "create_offer" }>,
 ): Promise<void> {
+  if (action.makerPosition === "fade" && action.legs.length < 2) {
+    throw new AppError(
+      400,
+      "FADE_REQUIRES_PARLAY",
+      "Choose at least two legs to fade a parlay.",
+    );
+  }
   if (action.legs.length > MAX_LEGS) {
     throw new AppError(
       400,
@@ -902,14 +925,16 @@ async function createOffer(
     db
       .prepare(
         `INSERT INTO offers
-          (id, maker_user_id, maker_risk_cents, taker_risk_cents, expires_at)
-         VALUES (?, ?, ?, ?, ?)`,
+          (id, maker_user_id, maker_risk_cents, taker_risk_cents,
+           maker_position, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         offerId,
         user.id,
         action.makerRiskCents,
         action.takerRiskCents,
+        action.makerPosition,
         expiresAt,
       ),
   ];
@@ -934,6 +959,7 @@ async function createOffer(
     auditStatement(db, user.id, "created_offer", "offer", offerId, {
       makerRiskCents: action.makerRiskCents,
       takerRiskCents: action.takerRiskCents,
+      makerPosition: action.makerPosition,
       legCount: action.legs.length,
     }),
   );
@@ -948,7 +974,8 @@ async function createCounteroffer(
   const root = await first<RootOfferRow>(
     db
       .prepare(
-        `SELECT id, maker_user_id, maker_risk_cents, taker_risk_cents, status
+        `SELECT id, maker_user_id, maker_risk_cents, taker_risk_cents,
+                maker_position, status
          FROM offers
          WHERE id = ?`,
       )
@@ -1143,7 +1170,8 @@ async function acceptOffer(
   const root = await first<RootOfferRow>(
     db
       .prepare(
-        `SELECT id, maker_user_id, maker_risk_cents, taker_risk_cents, status
+        `SELECT id, maker_user_id, maker_risk_cents, taker_risk_cents,
+                maker_position, status
          FROM offers
          WHERE id = ?`,
       )
@@ -1261,13 +1289,14 @@ async function acceptOffer(
         .prepare(
           `INSERT INTO bet_revisions
             (id, bet_id, revision_number, maker_risk_cents, taker_risk_cents,
-             proposer_user_id, recipient_user_id, status, change_note,
-             responded_at)
-           SELECT ?, id, 1, maker_risk_cents, taker_risk_cents,
-                  maker_user_id, taker_user_id, 'active',
+             maker_position, proposer_user_id, recipient_user_id, status,
+             change_note, responded_at)
+           SELECT ?, b.id, 1, b.maker_risk_cents, b.taker_risk_cents,
+                  o.maker_position, b.maker_user_id, b.taker_user_id, 'active',
                   'Original matched terms', CURRENT_TIMESTAMP
-           FROM bets
-           WHERE id = ?`,
+           FROM bets b
+           JOIN offers o ON o.id = b.offer_id
+           WHERE b.id = ?`,
         )
         .bind(betRevisionId, betId),
       db
@@ -1319,6 +1348,7 @@ async function acceptOffer(
         {
           offerId: root.id,
           acceptedCounterId,
+          makerPosition: root.maker_position,
         },
       ),
     ]);
@@ -1414,7 +1444,8 @@ async function cancelOffer(user: AppUser, offerId: string): Promise<void> {
   const offer = await first<RootOfferRow>(
     db
       .prepare(
-        `SELECT id, maker_user_id, maker_risk_cents, taker_risk_cents, status
+        `SELECT id, maker_user_id, maker_risk_cents, taker_risk_cents,
+                maker_position, status
          FROM offers
          WHERE id = ?`,
       )
@@ -1595,12 +1626,16 @@ async function proposeBetRevision(
     taker_user_id: string;
     status: BetStatus;
     current_revision_id: string;
+    current_maker_position: ParlayPosition;
   }>(
     db
       .prepare(
-        `SELECT id, maker_user_id, taker_user_id, status, current_revision_id
-         FROM bets
-         WHERE id = ?`,
+        `SELECT b.id, b.maker_user_id, b.taker_user_id, b.status,
+                b.current_revision_id,
+                br.maker_position AS current_maker_position
+         FROM bets b
+         JOIN bet_revisions br ON br.id = b.current_revision_id
+         WHERE b.id = ?`,
       )
       .bind(action.betId),
   );
@@ -1619,6 +1654,15 @@ async function proposeBetRevision(
       409,
       "BET_FINAL",
       "Settled bets cannot be changed.",
+    );
+  }
+  const proposedMakerPosition =
+    action.makerPosition ?? bet.current_maker_position;
+  if (proposedMakerPosition === "fade" && action.legs.length < 2) {
+    throw new AppError(
+      400,
+      "FADE_REQUIRES_PARLAY",
+      "Choose at least two legs to fade a parlay.",
     );
   }
 
@@ -1690,8 +1734,8 @@ async function proposeBetRevision(
       .prepare(
         `INSERT INTO bet_revisions
           (id, bet_id, revision_number, maker_risk_cents, taker_risk_cents,
-           proposer_user_id, recipient_user_id, change_note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           maker_position, proposer_user_id, recipient_user_id, change_note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         revisionId,
@@ -1699,6 +1743,7 @@ async function proposeBetRevision(
         nextRevision?.revision_number ?? 1,
         action.makerRiskCents,
         action.takerRiskCents,
+        proposedMakerPosition,
         user.id,
         recipientUserId,
         changeNote,
@@ -1745,6 +1790,8 @@ async function proposeBetRevision(
       betId: bet.id,
       revisionNumber: nextRevision?.revision_number ?? 1,
       changeNote,
+      previousMakerPosition: bet.current_maker_position,
+      makerPosition: proposedMakerPosition,
     },
   ).run();
 }
@@ -1762,13 +1809,18 @@ async function respondBetRevision(
     status: BetRevisionStatus;
     bet_status: BetStatus;
     current_revision_id: string;
+    maker_position: ParlayPosition;
+    current_maker_position: ParlayPosition;
   }>(
     db
       .prepare(
         `SELECT br.id, br.bet_id, br.recipient_user_id, br.status,
-                b.status AS bet_status, b.current_revision_id
+                br.maker_position, b.status AS bet_status,
+                b.current_revision_id,
+                current.maker_position AS current_maker_position
          FROM bet_revisions br
          JOIN bets b ON b.id = br.bet_id
+         JOIN bet_revisions current ON current.id = b.current_revision_id
          WHERE br.id = ?`,
       )
       .bind(betRevisionId),
@@ -1955,7 +2007,11 @@ async function respondBetRevision(
     "accepted_bet_revision",
     "bet_revision",
     revision.id,
-    { betId: revision.bet_id },
+    {
+      betId: revision.bet_id,
+      previousMakerPosition: revision.current_maker_position,
+      makerPosition: revision.maker_position,
+    },
   ).run();
 }
 
@@ -2186,8 +2242,9 @@ async function settlePendingBets(): Promise<void> {
   const db = getD1();
   const pendingLegs = await all<PendingBetLegRow>(
     db.prepare(
-      `SELECT b.id AS bet_id, b.maker_user_id, b.taker_user_id,
-              br.maker_risk_cents, br.taker_risk_cents,
+      `SELECT b.id AS bet_id, br.id AS bet_revision_id,
+              b.maker_user_id, b.taker_user_id,
+              br.maker_risk_cents, br.taker_risk_cents, br.maker_position,
               l.maker_selection, mr.status AS market_status,
               mr.winning_selection
        FROM bets b
@@ -2208,6 +2265,7 @@ async function settlePendingBets(): Promise<void> {
         if (leg.market_status === "void") return "void";
         return leg.winning_selection === leg.maker_selection ? "won" : "lost";
       }),
+      legs[0].maker_position,
     );
     if (result === "pending") continue;
 
@@ -2217,9 +2275,11 @@ async function settlePendingBets(): Promise<void> {
         .prepare(
           `UPDATE bets
            SET status = ?, settled_at = CURRENT_TIMESTAMP
-           WHERE id = ? AND status = 'pending'`,
+           WHERE id = ?
+             AND status = 'pending'
+             AND current_revision_id = ?`,
         )
-        .bind(result, betId),
+        .bind(result, betId, bet.bet_revision_id),
     );
     if (result === "maker_won") {
       statements.push(
@@ -2229,6 +2289,8 @@ async function settlePendingBets(): Promise<void> {
           bet.taker_user_id,
           bet.maker_user_id,
           bet.taker_risk_cents,
+          result,
+          bet.bet_revision_id,
         ),
       );
     } else if (result === "taker_won") {
@@ -2239,6 +2301,8 @@ async function settlePendingBets(): Promise<void> {
           bet.maker_user_id,
           bet.taker_user_id,
           bet.maker_risk_cents,
+          result,
+          bet.bet_revision_id,
         ),
       );
     }
@@ -2381,12 +2445,18 @@ function debtInsertStatement(
   debtorUserId: string,
   creditorUserId: string,
   amountCents: number,
+  result: Exclude<BetStatus, "pending" | "void">,
+  betRevisionId: string,
 ): D1PreparedStatement {
   return db
     .prepare(
       `INSERT OR IGNORE INTO debts
         (id, bet_id, debtor_user_id, creditor_user_id, amount_cents)
-       VALUES (?, ?, ?, ?, ?)`,
+       SELECT ?, ?, ?, ?, ?
+       FROM bets
+       WHERE id = ?
+         AND status = ?
+         AND current_revision_id = ?`,
     )
     .bind(
       crypto.randomUUID(),
@@ -2394,6 +2464,9 @@ function debtInsertStatement(
       debtorUserId,
       creditorUserId,
       amountCents,
+      betId,
+      result,
+      betRevisionId,
     );
 }
 
@@ -2466,6 +2539,10 @@ function toLegViews(
       leg.maker_selection === "a" ? leg.selection_a : leg.selection_b,
     marketStatus: leg.market_status,
   }));
+}
+
+function oppositePosition(position: ParlayPosition): ParlayPosition {
+  return position === "back" ? "fade" : "back";
 }
 
 async function first<T>(

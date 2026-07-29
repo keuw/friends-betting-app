@@ -1,4 +1,5 @@
 export type Selection = "a" | "b";
+export type ParlayPosition = "back" | "fade";
 export type MarketStatus = "open" | "resolved" | "void";
 export type OfferStatus = "open" | "accepted" | "cancelled" | "expired";
 export type BetStatus = "pending" | "maker_won" | "taker_won" | "void";
@@ -81,6 +82,7 @@ export type CounterofferView = {
 export type OfferView = {
   id: string;
   makerName: string;
+  makerPosition: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   status: OfferStatus;
@@ -95,6 +97,7 @@ export type BetView = {
   id: string;
   makerName: string;
   takerName: string;
+  makerPosition: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   status: BetStatus;
@@ -102,6 +105,7 @@ export type BetView = {
   settledAt: string | null;
   isParticipant: boolean;
   mySide: "maker" | "taker" | null;
+  myPosition: ParlayPosition | null;
   currentRevisionId: string;
   canProposeRevision: boolean;
   legs: OfferLegView[];
@@ -111,6 +115,7 @@ export type BetView = {
 export type BetRevisionView = {
   id: string;
   revisionNumber: number;
+  makerPosition: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   proposerName: string;
@@ -178,6 +183,7 @@ export type CreateMarketAction = {
 
 export type CreateOfferAction = {
   type: "create_offer";
+  makerPosition: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   legs: Array<{
@@ -233,6 +239,7 @@ export type ResolveMarketAction = {
 export type ProposeBetRevisionAction = {
   type: "propose_bet_revision";
   betId: string;
+  makerPosition?: ParlayPosition;
   makerRiskCents: number;
   takerRiskCents: number;
   changeNote: string;

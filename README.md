@@ -18,8 +18,13 @@ external method, both parties confirm the settlement in Sidebet.
   as the parent of another counteroffer.
 - Creating or countering an offer does not reserve funds. Sidebet has no wallet,
   deposit, balance, or credit limit.
-- An offer can contain one market or multiple legs. Every leg must win for a
-  parlay to win; a void leg is ignored.
+- An offer can contain one market or multiple legs. A parlay creator may Back
+  the selected AND proposition or Fade it and play house. Back wins only when
+  every non-void leg hits; Fade wins as soon as any leg misses. Reversing each
+  leg is not equivalent to fading a parlay.
+- Counteroffers negotiate money terms only and inherit the root Back/Fade
+  position. A matched-bet position can change only through a complete revision
+  accepted by the other participant.
 - The market creator acts as its resolver and may also make, counter, or accept
   offers on that market. Participation and resolution remain public to the
   group.
@@ -80,8 +85,9 @@ Production hosting is configured through `.openai/hosting.json`.
 ## Weekly Notion archive
 
 Matched bets can also be upserted into a private Notion database each Sunday.
-This human-readable archive includes frozen legs and complete matched-bet
-revision history, but it is not a full backup of D1.
+This human-readable archive includes the Back/Fade position, winning rule,
+frozen legs, and complete matched-bet revision history, but it is not a full
+backup of D1.
 
 See [docs/notion-archive.md](./docs/notion-archive.md) for the locked schema,
 least-privilege setup, secret rotation, manual reconciliation, and scheduler

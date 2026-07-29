@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phases 10 and 11 complete and verified; Phase 12 planned and awaiting approval.
+**Status:** Phase 12 implemented and locally verified; production deployment is in progress.
 
 ## Product contract
 
@@ -23,6 +23,12 @@ visible to signed-in members.
   - the original maker's maximum loss;
   - the opposing user's maximum loss;
   - the maker's selection or parlay proposition.
+- Multi-leg selections define one AND proposition. `back` takes that
+  proposition; `fade` takes its complement and wins when any selected leg
+  misses. Fade is never modeled by reversing each leg.
+- Counteroffers inherit the root Back/Fade position and negotiate money terms
+  only. A matched-bet position changes only through a mutually approved,
+  append-only revision.
 - American odds are derived for display; settlement uses the exact agreed
   amounts.
 - Any signed-in user except the maker may accept a root offer.
@@ -893,45 +899,45 @@ Integrity and threat model:
 
 Implementation:
 
-- [ ] Add failing domain truth-table tests for Back and Fade across all-hit,
+- [x] Add failing domain truth-table tests for Back and Fade across all-hit,
   one-miss, pending, partially void, and all-void parlays; prove that one miss
   settles a Fade winner immediately and exact risk amounts remain unchanged.
-- [ ] Add failing parser and production D1 regressions for create-offer
+- [x] Add failing parser and production D1 regressions for create-offer
   position validation, legacy defaults, counter inheritance, atomic initial
   revision persistence, Fade settlement debts, mutually approved position
   changes, stale revision responses, and resolution-versus-revision races.
-- [ ] Add `ParlayPosition` and position-aware offer, bet revision, state, and
+- [x] Add `ParlayPosition` and position-aware offer, bet revision, state, and
   Notion export contracts in `lib/contracts.ts`, `lib/action-parser.ts`, and
   `lib/notion-export.ts`.
-- [ ] Refactor `lib/domain.ts` so grading first determines whether the selected
+- [x] Refactor `lib/domain.ts` so grading first determines whether the selected
   parlay won, lost, remains pending, or is void, then maps that proposition
   result through the persisted maker position to `maker_won` or `taker_won`.
-- [ ] Add the two `maker_position` columns to `db/schema.ts`, `db/index.ts`,
+- [x] Add the two `maker_position` columns to `db/schema.ts`, `db/index.ts`,
   and the generated Drizzle migration with idempotent `back` compatibility for
   every existing row.
-- [ ] Update `lib/server.ts` create, accept, state-query, revision, audit, and
+- [x] Update `lib/server.ts` create, accept, state-query, revision, audit, and
   settlement paths to persist and consume the immutable position while
   preserving the existing single-winner transaction guards.
-- [ ] Add the responsive, keyboard-accessible Back/Fade composer control and
+- [x] Add the responsive, keyboard-accessible Back/Fade composer control and
   reset behavior in `app/BettingApp.tsx` and `app/globals.css`, including
   complete disabled, pending, success, error, and stale-state handling.
-- [ ] Update offer cards, acceptance calls to action, My Bets, proposed-term
+- [x] Update offer cards, acceptance calls to action, My Bets, proposed-term
   comparisons, participant ribbons, and revision history with explicit
   participant roles and winning-condition copy.
-- [ ] Extend `lib/notion-export-repository.ts`, `lib/notion-export.ts`, archive
+- [x] Extend `lib/notion-export-repository.ts`, `lib/notion-export.ts`, archive
   setup/reconciliation scripts, and their tests with active position, winning
   rule, and before/after revision history while preserving redaction and
   idempotent hashes.
-- [ ] Update `README.md`, `CONTRIBUTING.md`, and the top-level parlay invariants
+- [x] Update `README.md`, `CONTRIBUTING.md`, and the top-level parlay invariants
   in this plan after implementation so contributors cannot model Fade by
   reversing each leg.
-- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect the
   generated SQL and packaged Worker for an additive migration and no secrets.
-- [ ] Exercise separate maker and taker identities against a multi-leg Back
+- [x] Exercise separate maker and taker identities against a multi-leg Back
   offer, a multi-leg Fade offer, a money-only counteroffer, and a mutually
   approved position revision, including early settlement and void cases.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+- [/] Commit and push the exact verified source, deploy a saved Sites version,
   verify the production D1 backfill and Notion reconciliation, then confirm the
   public app returns successfully with no new Worker errors.
 

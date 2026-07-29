@@ -45,6 +45,18 @@ async function initializeSchema(): Promise<void> {
     "current_revision_id",
     "ALTER TABLE bets ADD COLUMN current_revision_id TEXT",
   );
+  await ensureColumn(
+    db,
+    "offers",
+    "maker_position",
+    "ALTER TABLE offers ADD COLUMN maker_position TEXT NOT NULL DEFAULT 'back' CHECK (maker_position IN ('back', 'fade'))",
+  );
+  await ensureColumn(
+    db,
+    "bet_revisions",
+    "maker_position",
+    "ALTER TABLE bet_revisions ADD COLUMN maker_position TEXT NOT NULL DEFAULT 'back' CHECK (maker_position IN ('back', 'fade'))",
+  );
   await db.batch(
     REVISION_BACKFILL_STATEMENTS.map((statement) => db.prepare(statement)),
   );
@@ -52,7 +64,7 @@ async function initializeSchema(): Promise<void> {
 
 async function ensureColumn(
   db: D1Database,
-  table: "markets" | "offer_legs" | "bets",
+  table: "markets" | "offer_legs" | "bets" | "offers" | "bet_revisions",
   column: string,
   alterStatement: string,
 ): Promise<void> {
@@ -111,6 +123,7 @@ const SCHEMA_STATEMENTS = [
     maker_user_id TEXT NOT NULL REFERENCES users(id),
     maker_risk_cents INTEGER NOT NULL CHECK (maker_risk_cents > 0),
     taker_risk_cents INTEGER NOT NULL CHECK (taker_risk_cents > 0),
+    maker_position TEXT NOT NULL DEFAULT 'back' CHECK (maker_position IN ('back', 'fade')),
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'accepted', 'cancelled', 'expired')),
     accepted_by_user_id TEXT REFERENCES users(id),
     accepted_counter_id TEXT,
@@ -167,6 +180,7 @@ const SCHEMA_STATEMENTS = [
     revision_number INTEGER NOT NULL CHECK (revision_number > 0),
     maker_risk_cents INTEGER NOT NULL CHECK (maker_risk_cents > 0),
     taker_risk_cents INTEGER NOT NULL CHECK (taker_risk_cents > 0),
+    maker_position TEXT NOT NULL DEFAULT 'back' CHECK (maker_position IN ('back', 'fade')),
     proposer_user_id TEXT NOT NULL REFERENCES users(id),
     recipient_user_id TEXT NOT NULL REFERENCES users(id),
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('active', 'pending', 'rejected', 'cancelled', 'superseded')),
@@ -268,13 +282,13 @@ const REVISION_BACKFILL_STATEMENTS = [
    WHERE market_revision_id IS NULL`,
   `INSERT OR IGNORE INTO bet_revisions (
      id, bet_id, revision_number, maker_risk_cents, taker_risk_cents,
-     proposer_user_id, recipient_user_id, status, change_note, created_at,
-     responded_at
+     maker_position, proposer_user_id, recipient_user_id, status, change_note,
+     created_at, responded_at
    )
    SELECT
      'bet-revision:' || id, id, 1, maker_risk_cents, taker_risk_cents,
-     maker_user_id, taker_user_id, 'active', 'Original matched terms',
-     accepted_at, accepted_at
+     'back', maker_user_id, taker_user_id, 'active',
+     'Original matched terms', accepted_at, accepted_at
    FROM bets`,
   `UPDATE bets
    SET current_revision_id = 'bet-revision:' || id
