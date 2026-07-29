@@ -1693,6 +1693,129 @@ Acceptance:
 - No database, API, authorization, settlement, debt, audit, or Notion export
   behavior changes.
 
+### Phase 18 — Show complete offer rules and each participant's side
+
+Make every offer understandable before acceptance and every matched bet
+understandable from the signed-in participant's perspective. Surface the exact
+versioned market context, name both sides of the agreement, and state what the
+viewer needs in order to win without changing settlement semantics.
+
+Exact-rule data contract:
+
+- Extend each `OfferLegView` with the description from its captured
+  `market_revision_id`, not the market's latest description. Offers and matched
+  bets must therefore keep showing the context that governed their exact
+  version even after the market is edited.
+- Include a server-derived label for the selection opposite the listed maker
+  selection. Do not make the client infer the other outcome from current market
+  state.
+- Select the description and both outcome labels in the existing offer-leg and
+  bet-revision-leg joins and map them through the shared leg-view function.
+- This is a read-model extension only: no D1 migration, historical rewrite,
+  action payload change, or settlement-rule change is required.
+- An empty optional context is omitted cleanly. A non-empty context is rendered
+  in full and wraps without widening the card.
+
+Offer-card contract:
+
+- Each offer leg shows, in order: market question, exact market context,
+  betting deadline, revision badge, and the listed pick.
+- Add an `OFFER SIDES` summary immediately before the stakes and actions. For a
+  straight bet it names the maker's outcome and says `You if accepted` with the
+  exact opposite outcome. For a parlay it names who Backs and who Fades the
+  listed picks.
+- State the winning rule beside each position. Back wins only if every
+  non-void listed pick hits; Fade wins if any listed pick misses. Never describe
+  Fade as reversing every parlay leg.
+- For a viewer who can accept, change generic opponent copy to personal copy:
+  `You risk`, `Your side`, and `You win if`. The maker's own card retains
+  neutral `Friend who accepts` wording.
+- Replace the straight-bet `Take the other side` action with the exact result,
+  such as `Accept · Lakers win`. Parlay actions remain position-based but become
+  explicit, such as `Accept · Fade this parlay`.
+- Counteroffer acceptance uses the same perspective rule: exact outcome for a
+  straight bet, Back/Fade for a parlay. Negotiated money remains in the original
+  maker/taker perspective.
+
+Matched-bet contract:
+
+- Replace the rotated `YOUR SIDE: MAKER/TAKER` ribbon with an in-flow
+  `YOUR BET` summary for participants. `Maker` and `taker` remain internal role
+  names and are not presented as the user's meaningful betting side.
+- For a straight bet, the summary shows `Your pick` with the viewer's exact
+  outcome, `You win if` with the same resolved outcome, the opponent's outcome,
+  and the viewer's maximum risk.
+- For a parlay, the summary shows `Your position: Back/Fade`, identifies the
+  listed picks as the proposition being backed or faded, and states the
+  viewer-specific winning rule in direct `You win…` language.
+- Observers continue to receive a neutral two-party explanation naming each
+  participant and their winning condition; they never receive a misleading
+  `Your bet` panel.
+- Each current matched-bet leg also shows its captured market context. The
+  listed selection is labeled `Listed pick` for parlays so a Fade participant
+  does not mistake every listed pick for their own side.
+- Keep status, exact revision, dates, risks, edit/void controls, history,
+  settlement, and participant permissions unchanged.
+
+Visual, responsive, and accessibility contract:
+
+- Use one compact blue informational surface for side/win summaries and the
+  existing paper/cream hierarchy for market context. Do not add modal
+  confirmation or hide rules behind disclosure.
+- Treat context as supporting copy and the viewer's side/winning condition as
+  the strongest content immediately before acceptance.
+- Long questions, contexts, names, and outcome labels wrap. At the `680px`
+  breakpoint the two-side summary stacks while preserving maker/acceptor order
+  and full-width actions.
+- The accepting button's accessible name contains the exact outcome or parlay
+  position. Repeated labels remain understandable without relying on color.
+
+Implementation:
+
+- [x] Add failing unit tests for straight and parlay perspective helpers,
+  covering maker, taker, observer, Back, Fade, and exact opposite selections.
+- [x] Add failing rendered-output regressions for captured context,
+  `OFFER SIDES`, `You if accepted`, exact straight acceptance copy,
+  Back/Fade acceptance copy, `YOUR BET`, `Your pick`, and `You win if`.
+- [x] Extend `OfferLegRow`, `BetRevisionLegRow`, and `OfferLegView` with the
+  captured market description and opposite selection label; update both D1
+  joins and the shared leg mapper.
+- [x] Build typed helpers for viewer-facing side labels and winning rules so the
+  offer card, counter acceptance, matched-bet summary, and leg labels cannot
+  drift independently.
+- [x] Update offer legs, the pre-acceptance side summary, stakes copy, root
+  acceptance action, and counteroffer acceptance in `app/BettingApp.tsx`.
+- [x] Replace the matched-bet ribbon with the participant/observer summary and
+  render exact context in current bet legs.
+- [x] Add scoped offer-rule, market-context, side-summary, and personal-bet
+  styles in `app/globals.css`, including narrow-screen stacking.
+- [x] Update `DESIGN.md` to require pre-acceptance side/win clarity and
+  participant-perspective matched-bet summaries.
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
+  `npm run typecheck`, and `npm run build`; confirm no migration is generated
+  and existing Back/Fade D1 settlement tests remain green.
+- [/] Inspect straight and parlay offers plus maker, taker, and observer matched
+  views at desktop and mobile widths. The in-app browser was unavailable;
+  compiled responsive and accessibility regressions pass.
+- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+  and verify the new context and side copy on the live app.
+
+Acceptance:
+
+- A friend can read the exact captured market context, their side, their risk,
+  and the condition required for them to win before accepting an offer.
+- A straight-bet acceptance action names the actual outcome being accepted
+  instead of saying only `Take the other side`.
+- A parlay clearly distinguishes its listed picks from Back/Fade positions and
+  describes Fade as winning when any listed pick misses.
+- In Matched bets, each participant receives a prominent personal summary of
+  their pick or position and their winning condition; observers receive a
+  neutral explanation.
+- Existing offers and matched bets gain the clarification from stored revision
+  data without rewriting history or changing any wager result.
+- Authentication, acceptance concurrency, counteroffers, revisions, mutual
+  voids, settlement, debts, Notion export, and market deletion continue to pass.
+
 ## Required verification
 
 ```text

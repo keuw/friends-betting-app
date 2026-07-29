@@ -89,6 +89,7 @@ type OfferLegRow = {
   market_revision_id: string;
   market_revision_number: number;
   market_question: string;
+  market_description: string;
   market_closes_at: string;
   selection_a: string;
   selection_b: string;
@@ -355,7 +356,9 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     db.prepare(
       `SELECT l.offer_id, l.market_id, l.market_revision_id,
               l.maker_selection, mr.revision_number AS market_revision_number,
-              mr.question AS market_question, mr.selection_a, mr.selection_b,
+              mr.question AS market_question,
+              mr.description AS market_description,
+              mr.selection_a, mr.selection_b,
               mr.closes_at AS market_closes_at, mr.status AS market_status
        FROM offer_legs l
        JOIN market_revisions mr ON mr.id = l.market_revision_id
@@ -398,7 +401,9 @@ export async function getAppState(user: AppUser): Promise<AppState> {
       `SELECT brl.bet_revision_id, brl.market_id, brl.market_revision_id,
               brl.maker_selection,
               mr.revision_number AS market_revision_number,
-              mr.question AS market_question, mr.selection_a, mr.selection_b,
+              mr.question AS market_question,
+              mr.description AS market_description,
+              mr.selection_a, mr.selection_b,
               mr.closes_at AS market_closes_at, mr.status AS market_status
        FROM bet_revision_legs brl
        JOIN market_revisions mr ON mr.id = brl.market_revision_id
@@ -3383,10 +3388,13 @@ function toLegViews(
     marketRevisionId: leg.market_revision_id,
     marketRevisionNumber: leg.market_revision_number,
     marketQuestion: leg.market_question,
+    marketDescription: leg.market_description,
     marketClosesAt: leg.market_closes_at,
     makerSelection: leg.maker_selection,
     makerSelectionLabel:
       leg.maker_selection === "a" ? leg.selection_a : leg.selection_b,
+    takerSelectionLabel:
+      leg.maker_selection === "a" ? leg.selection_b : leg.selection_a,
     marketStatus: leg.market_status,
   }));
 }

@@ -72,9 +72,11 @@ export type OfferLegView = {
   marketRevisionId: string;
   marketRevisionNumber: number;
   marketQuestion: string;
+  marketDescription: string;
   marketClosesAt: string;
   makerSelection: Selection;
   makerSelectionLabel: string;
+  takerSelectionLabel: string;
   marketStatus: MarketStatus;
 };
 

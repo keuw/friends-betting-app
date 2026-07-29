@@ -68,6 +68,16 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
   in an explicit old-versus-new comparison. Acceptance and rejection are
   visually distinct, and the interface states that nothing changes before the
   other participant accepts.
+- Every acceptance surface names the viewer's exact outcome or Back/Fade
+  position and states what must happen for that viewer to win. Internal
+  maker/taker roles never substitute for a meaningful user-facing side.
+- Offer and matched-bet legs show context from their captured market revision,
+  not the market's latest version. Parlay cards label selections as listed
+  picks and explain that Fade wins when any listed pick misses; Fade is never
+  presented as reversing every leg.
+- A participant's matched-bet card uses an in-flow `YOUR BET` summary for their
+  side, winning condition, opponent, and maximum risk. Observers receive a
+  neutral two-party explanation instead of personalized language.
 
 ## Responsive behavior
 

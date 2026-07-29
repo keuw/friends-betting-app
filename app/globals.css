@@ -1290,6 +1290,28 @@ button.brand-lockup {
   min-width: 0;
 }
 
+.offer-leg .market-context,
+.bet-leg-list .market-context {
+  overflow-wrap: anywhere;
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.offer-leg .market-context > span,
+.bet-leg-list .market-context > span {
+  display: block;
+  margin-bottom: 0.14rem;
+  color: var(--ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.5rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .offer-leg .betting-deadline {
   margin-top: 0.28rem;
 }
@@ -1301,15 +1323,101 @@ button.brand-lockup {
   text-align: right;
 }
 
-.position-rule {
-  margin: 0;
-  padding: 0.75rem 1.2rem;
-  border-top: 1px dashed var(--line);
-  border-bottom: 1px solid var(--line);
-  background: var(--cream);
+.offer-listed-pick {
+  display: grid !important;
+  flex: 0 0 min(12rem, 38%);
+  justify-items: end;
+  gap: 0.22rem !important;
+}
+
+.offer-listed-pick > span {
   color: var(--muted);
-  font-size: 0.65rem;
-  line-height: 1.5;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.5rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.offer-side-summary {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  background: var(--surface-info);
+}
+
+.side-summary-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.62rem 1.2rem;
+  border-bottom: 1px dashed rgba(20, 32, 24, 0.22);
+}
+
+.side-summary-heading > span {
+  color: var(--ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.54rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+}
+
+.side-summary-heading > small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  text-align: right;
+}
+
+.offer-side-grid,
+.personal-bet-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.offer-side-grid > div,
+.personal-bet-grid > div {
+  min-width: 0;
+  padding: 0.8rem 1.2rem;
+}
+
+.offer-side-grid > div + div,
+.personal-bet-grid > div + div {
+  border-left: 1px solid rgba(20, 32, 24, 0.16);
+}
+
+.offer-side-grid > div > span,
+.personal-bet-grid > div > span {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.offer-side-grid strong,
+.personal-bet-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 0.22rem;
+  color: var(--blue);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.76rem;
+}
+
+.offer-side-grid p,
+.personal-bet-grid p {
+  overflow-wrap: anywhere;
+  margin: 0.28rem 0 0;
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+
+.offer-side-grid .accepting-side {
+  background: rgba(216, 255, 100, 0.24);
 }
 
 .offer-stakes {
@@ -1606,23 +1714,35 @@ button.brand-lockup {
   font-weight: 400;
 }
 
-.bet-position-summary {
+.personal-bet-summary {
+  overflow: hidden;
   margin: -0.35rem 0 0.85rem;
-  padding: 0.65rem;
-  border-left: 3px solid var(--blue);
+  border: 1px solid rgba(98, 117, 255, 0.45);
+  border-radius: var(--radius-sm);
   background: var(--surface-info);
 }
 
-.bet-position-summary strong {
-  display: block;
-  font-size: 0.67rem;
+.personal-bet-summary .side-summary-heading {
+  padding: 0.55rem 0.65rem;
 }
 
-.bet-position-summary p {
-  margin: 0.25rem 0 0;
-  color: var(--muted);
-  font-size: 0.58rem;
-  line-height: 1.45;
+.personal-bet-summary .offer-side-grid > div,
+.personal-bet-grid > div {
+  padding: 0.68rem;
+}
+
+.personal-bet-summary:not(.observer) .personal-bet-grid > div:first-child {
+  border-left: 3px solid var(--blue);
+}
+
+.personal-bet-opponent {
+  background: rgba(255, 253, 247, 0.7);
+}
+
+.personal-bet-grid p b {
+  color: var(--ink);
+  font-family: var(--font-geist-mono), monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .bet-leg-list {
@@ -1637,6 +1757,22 @@ button.brand-lockup {
   border: 1px solid rgba(98, 117, 255, 0.32);
   border-radius: var(--radius-sm);
   background: var(--surface-info);
+}
+
+.bet-leg-pick {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.bet-leg-pick strong {
+  overflow-wrap: anywhere;
+  color: var(--blue);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.65rem;
+  text-align: right;
 }
 
 .bet-leg-list span {
@@ -2188,20 +2324,6 @@ button.brand-lockup {
   background: var(--paper);
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.54rem;
-}
-
-.participant-ribbon {
-  position: absolute;
-  top: 2.9rem;
-  right: -2.8rem;
-  width: 9rem;
-  padding: 0.3rem;
-  background: var(--coral);
-  font-family: var(--font-geist-mono), monospace;
-  font-size: 0.5rem;
-  font-weight: 850;
-  text-align: center;
-  transform: rotate(42deg);
 }
 
 .settle-grid {
@@ -3113,6 +3235,47 @@ button.brand-lockup {
   }
 
   .offer-leg strong {
+    text-align: left;
+  }
+
+  .offer-listed-pick {
+    width: 100%;
+    flex-basis: auto;
+    justify-items: start;
+  }
+
+  .offer-listed-pick > span {
+    text-align: left;
+  }
+
+  .side-summary-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .side-summary-heading > small {
+    text-align: left;
+  }
+
+  .offer-side-grid,
+  .personal-bet-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-side-grid > div + div,
+  .personal-bet-grid > div + div {
+    border-top: 1px solid rgba(20, 32, 24, 0.16);
+    border-left: 0;
+  }
+
+  .bet-leg-pick {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .bet-leg-pick strong {
     text-align: left;
   }
 

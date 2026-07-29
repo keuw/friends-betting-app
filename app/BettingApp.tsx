@@ -20,6 +20,14 @@ import type {
   ParlayPosition,
   Selection,
 } from "@/lib/contracts";
+import {
+  matchedBetPerspective,
+  offerAcceptancePerspective,
+  offerSideDetails,
+  oppositePosition,
+  parlayWinningRule,
+  positionLabel,
+} from "@/lib/bet-perspective";
 import { americanOdds } from "@/lib/domain";
 import {
   filterAndSortMarkets,
@@ -733,6 +741,11 @@ function OfferCard({
     (counter) => counter.status === "pending",
   );
   const odds = americanOdds(offer.makerRiskCents, offer.takerRiskCents);
+  const sides = offerSideDetails(
+    offer,
+    offer.isMine ? "They" : "You",
+  );
+  const acceptance = offerAcceptancePerspective(offer);
 
   return (
     <article className="offer-card">
@@ -768,26 +781,54 @@ function OfferCard({
             <div>
               <div>
                 <p>{leg.marketQuestion}</p>
+                {leg.marketDescription && (
+                  <p className="market-context">
+                    <span>Context</span>
+                    {leg.marketDescription}
+                  </p>
+                )}
                 <BettingDeadline value={leg.marketClosesAt} />
                 <span className="revision-tag">
                   Market v{leg.marketRevisionNumber}
                 </span>
               </div>
-              <strong>{leg.makerSelectionLabel}</strong>
+              <div className="offer-listed-pick">
+                <span>
+                  {offer.legs.length > 1
+                    ? "Listed pick"
+                    : `${offer.makerName}'s side`}
+                </span>
+                <strong>{leg.makerSelectionLabel}</strong>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {offer.legs.length > 1 && (
-        <p className="position-rule">
-          {parlayWinningRule(
-            offer.makerName,
-            "Opponent",
-            offer.makerPosition,
-          )}
-        </p>
-      )}
+      <section className="offer-side-summary" aria-label="Offer sides">
+        <div className="side-summary-heading">
+          <span>OFFER SIDES</span>
+          <small>
+            {offer.legs.length > 1
+              ? "Back or fade the listed picks"
+              : "The two possible outcomes"}
+          </small>
+        </div>
+        <div className="offer-side-grid">
+          <div>
+            <span>{offer.makerName}</span>
+            <strong>{sides.maker.side}</strong>
+            <p>{sides.maker.winRule}</p>
+          </div>
+          <div className="accepting-side">
+            <span>
+              {offer.isMine ? "Friend who accepts" : "You if accepted"}
+            </span>
+            <strong>{sides.acceptor.side}</strong>
+            <p>{sides.acceptor.winRule}</p>
+          </div>
+        </div>
+      </section>
 
       <div className="offer-stakes">
         <div>
@@ -796,7 +837,7 @@ function OfferCard({
         </div>
         <span className="vs-mark">VS</span>
         <div>
-          <span>Opponent risks</span>
+          <span>{offer.isMine ? "Friend risks" : "You risk"}</span>
           <strong>{money(offer.takerRiskCents)}</strong>
         </div>
       </div>
@@ -847,9 +888,7 @@ function OfferCard({
                 ).catch(() => undefined)
               }
             >
-              {offer.legs.length > 1
-                ? `${positionLabel(oppositePosition(offer.makerPosition))} this parlay`
-                : "Take the other side"}
+              {acceptance.actionLabel}
             </button>
             <button
               type="button"
@@ -886,6 +925,14 @@ function CounterRow({
   onAction: (action: AppAction, message: string) => Promise<void>;
 }) {
   const [countering, setCountering] = useState(false);
+  const sides = offerSideDetails(offer);
+  const acceptingSide = offer.isMine
+    ? sides.maker.side
+    : sides.acceptor.side;
+  const acceptingLabel =
+    offer.legs.length === 1
+      ? `Accept · ${acceptingSide}`
+      : `Accept · ${acceptingSide} this parlay`;
 
   return (
     <div className="counter-row">
@@ -912,12 +959,7 @@ function CounterRow({
               ).catch(() => undefined)
             }
           >
-            Accept as{" "}
-            {positionLabel(
-              offer.isMine
-                ? offer.makerPosition
-                : oppositePosition(offer.makerPosition),
-            )}
+            {acceptingLabel}
           </button>
           <button
             type="button"
@@ -1107,6 +1149,7 @@ function BetCard({
   const voidReasonInputId = `void-reason-${bet.id}`;
   const voidReasonHelpId = `${voidReasonInputId}-help`;
   const voidReasonCountId = `${voidReasonInputId}-count`;
+  const perspective = matchedBetPerspective(bet);
 
   return (
     <article className={`bet-card ${bet.isParticipant ? "mine" : ""}`}>
@@ -1122,19 +1165,12 @@ function BetCard({
       <h3>
         {bet.makerName} <span>vs</span> {bet.takerName}
       </h3>
-      {bet.legs.length > 1 && (
-        <div className="bet-position-summary">
-          <strong>{parlayRoleSentence(bet)}</strong>
-          <p>
-            {parlayWinningRule(
-              bet.makerName,
-              bet.takerName,
-              bet.makerPosition,
-            )}
-          </p>
-        </div>
-      )}
-      <BetLegList betId={bet.id} legs={bet.legs} />
+      <BetPerspectiveSummary perspective={perspective} />
+      <BetLegList
+        betId={bet.id}
+        legs={bet.legs}
+        isParlay={bet.legs.length > 1}
+      />
       <div className="bet-bottom">
         <div>
           <span>{bet.makerName} risks</span>
@@ -1478,16 +1514,64 @@ function BetCard({
       {showHistory && bet.voidRequests.length > 0 && (
         <VoidRequestHistory requests={bet.voidRequests} />
       )}
-
-      {bet.isParticipant && (
-        <span className="participant-ribbon">
-          YOUR SIDE:{" "}
-          {bet.legs.length > 1
-            ? bet.myPosition?.toUpperCase()
-            : bet.mySide?.toUpperCase()}
-        </span>
-      )}
     </article>
+  );
+}
+
+function BetPerspectiveSummary({
+  perspective,
+}: {
+  perspective: ReturnType<typeof matchedBetPerspective>;
+}) {
+  if (perspective.kind === "observer") {
+    return (
+      <section
+        className="personal-bet-summary observer"
+        aria-label="Bet sides"
+      >
+        <div className="side-summary-heading">
+          <span>{perspective.title}</span>
+          <small>What each friend needs to win</small>
+        </div>
+        <div className="offer-side-grid">
+          <div>
+            <span>{perspective.maker.name}</span>
+            <strong>{perspective.maker.side}</strong>
+            <p>{perspective.maker.winRule}</p>
+          </div>
+          <div>
+            <span>{perspective.taker.name}</span>
+            <strong>{perspective.taker.side}</strong>
+            <p>{perspective.taker.winRule}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="personal-bet-summary" aria-label="Your bet">
+      <div className="side-summary-heading">
+        <span>{perspective.title}</span>
+        <small>Your side and winning condition</small>
+      </div>
+      <div className="personal-bet-grid">
+        <div>
+          <span>{perspective.sideLabel}</span>
+          <strong>{perspective.side}</strong>
+          <p>{perspective.winRule}</p>
+        </div>
+        <div className="personal-bet-opponent">
+          <span>Opponent</span>
+          <strong>
+            {perspective.opponentName}: {perspective.opponentSide}
+          </strong>
+          <p>
+            Your maximum risk is <b>{money(perspective.riskCents)}</b>.
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1753,16 +1837,31 @@ function BetRevisionEditor({
 function BetLegList({
   betId,
   legs,
+  isParlay,
 }: {
   betId: string;
   legs: BetView["legs"];
+  isParlay: boolean;
 }) {
   return (
     <div className="bet-leg-list">
       {legs.map((leg) => (
         <div key={`${betId}-${leg.marketRevisionId}`}>
-          <span>{leg.makerSelectionLabel}</span>
+          <div className="bet-leg-pick">
+            <span>{isParlay ? "Listed pick" : "Market outcomes"}</span>
+            <strong>
+              {isParlay
+                ? leg.makerSelectionLabel
+                : `${leg.makerSelectionLabel} vs ${leg.takerSelectionLabel}`}
+            </strong>
+          </div>
           <p>{leg.marketQuestion}</p>
+          {leg.marketDescription && (
+            <p className="market-context">
+              <span>Context</span>
+              {leg.marketDescription}
+            </p>
+          )}
           <BettingDeadline value={leg.marketClosesAt} />
           <span className="revision-tag">
             Market v{leg.marketRevisionNumber}
@@ -2921,32 +3020,6 @@ function toggleSelection(
     return next;
   }
   return { ...current, [marketId]: selection };
-}
-
-function oppositePosition(position: ParlayPosition): ParlayPosition {
-  return position === "back" ? "fade" : "back";
-}
-
-function positionLabel(position: ParlayPosition): "Back" | "Fade" {
-  return position === "back" ? "Back" : "Fade";
-}
-
-function parlayRoleSentence(
-  bet: Pick<BetView, "makerName" | "takerName" | "makerPosition">,
-): string {
-  return bet.makerPosition === "back"
-    ? `${bet.makerName} backs it; ${bet.takerName} fades it.`
-    : `${bet.makerName} fades it; ${bet.takerName} backs it.`;
-}
-
-function parlayWinningRule(
-  makerName: string,
-  takerName: string,
-  makerPosition: ParlayPosition,
-): string {
-  return makerPosition === "back"
-    ? `${makerName} wins if every non-void pick hits; ${takerName} wins if any pick misses.`
-    : `${makerName} wins if any pick misses; ${takerName} wins if every non-void pick hits.`;
 }
 
 function money(cents: number): string {
