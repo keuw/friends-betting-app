@@ -1,7 +1,7 @@
 # Sidebet — Implementation Plan
 
 **Updated:** 2026-07-28
-**Status:** Phase 12 implemented and locally verified; production deployment is in progress.
+**Status:** Phase 12 complete, verified, pushed, and deployed.
 
 ## Product contract
 
@@ -937,7 +937,7 @@ Implementation:
 - [x] Exercise separate maker and taker identities against a multi-leg Back
   offer, a multi-leg Fade offer, a money-only counteroffer, and a mutually
   approved position revision, including early settlement and void cases.
-- [/] Commit and push the exact verified source, deploy a saved Sites version,
+- [x] Commit and push the exact verified source, deploy a saved Sites version,
   verify the production D1 backfill and Notion reconciliation, then confirm the
   public app returns successfully with no new Worker errors.
 
