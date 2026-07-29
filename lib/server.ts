@@ -947,7 +947,12 @@ async function editMarket(
         ),
     ]);
   } catch (error) {
-    if (String(error).toLowerCase().includes("unique")) {
+    const message = String(error).toLowerCase();
+    if (
+      message.includes("unique") ||
+      message.includes("foreign key") ||
+      message.includes("constraint failed")
+    ) {
       throw new AppError(
         409,
         "MARKET_CHANGED",

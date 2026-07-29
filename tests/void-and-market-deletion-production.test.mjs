@@ -143,6 +143,15 @@ test(
       assert.equal(
         (
           await postAction(baseUrl, maker, {
+            type: "delete_market",
+            marketId: offerMarket.id,
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
             type: "cancel_offer",
             offerId: offer.id,
           })
@@ -211,6 +220,15 @@ test(
       });
       assert.equal(acceptance.status, 200);
       const bet = betForMarket(acceptance.payload, betMarket.id);
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "delete_market",
+            marketId: betMarket.id,
+          })
+        ).status,
+        409,
+      );
 
       const observerRequest = await postAction(baseUrl, observer, {
         type: "request_bet_void",
@@ -336,6 +354,15 @@ test(
       assert.equal(blockedBetMarket.offerReferenceCount, 1);
       assert.equal(blockedBetMarket.betReferenceCount, 1);
       assert.equal(blockedBetMarket.canDelete, false);
+      assert.equal(
+        (
+          await postAction(baseUrl, maker, {
+            type: "delete_market",
+            marketId: betMarket.id,
+          })
+        ).status,
+        409,
+      );
 
       const raceMarket = await createMarket(
         baseUrl,
@@ -535,6 +562,102 @@ test(
           1_000,
         );
       }
+
+      for (const [label, result, expectedStatus] of [
+        ["maker-won", "a", "maker_won"],
+        ["taker-won", "b", "taker_won"],
+      ]) {
+        const finalMarket = await createMarket(
+          baseUrl,
+          maker,
+          `${label} deletion blocker ${stamp}`,
+        );
+        const finalOffer = await createOffer(baseUrl, maker, finalMarket);
+        const finalAcceptance = await postAction(baseUrl, taker, {
+          type: "accept_offer",
+          offerId: finalOffer.id,
+        });
+        assert.equal(finalAcceptance.status, 200);
+        const finalResolution = await postAction(baseUrl, maker, {
+          type: "resolve_market",
+          marketId: finalMarket.id,
+          marketRevisionId: finalMarket.currentRevisionId,
+          result,
+        });
+        assert.equal(finalResolution.status, 200);
+        assert.equal(
+          betForMarket(finalResolution.payload, finalMarket.id).status,
+          expectedStatus,
+        );
+        assert.equal(
+          (
+            await postAction(baseUrl, maker, {
+              type: "delete_market",
+              marketId: finalMarket.id,
+            })
+          ).status,
+          409,
+        );
+      }
+
+      const editDeletionRaceMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Edit deletion race ${stamp}`,
+      );
+      const [concurrentEdit, concurrentEditDeletion] = await Promise.all([
+        postAction(baseUrl, maker, {
+          type: "edit_market",
+          marketId: editDeletionRaceMarket.id,
+          baseRevisionId: editDeletionRaceMarket.currentRevisionId,
+          question: `${editDeletionRaceMarket.question} edited`,
+          description: "Race an edit against permanent deletion",
+          selectionA: "Yes",
+          selectionB: "No",
+          closesAt: "2035-01-03T00:00:00.000Z",
+          changeNote: "Concurrent edit",
+        }),
+        postAction(baseUrl, maker, {
+          type: "delete_market",
+          marketId: editDeletionRaceMarket.id,
+        }),
+      ]);
+      assert.ok([200, 404, 409].includes(concurrentEdit.status));
+      assert.equal(concurrentEditDeletion.status, 200);
+      assert.equal(
+        (await getState(baseUrl, maker)).markets.some(
+          (market) => market.id === editDeletionRaceMarket.id,
+        ),
+        false,
+      );
+
+      const resolutionDeletionRaceMarket = await createMarket(
+        baseUrl,
+        maker,
+        `Resolution deletion race ${stamp}`,
+      );
+      const [concurrentMarketResolution, concurrentResolutionDeletion] =
+        await Promise.all([
+          postAction(baseUrl, maker, {
+            type: "resolve_market",
+            marketId: resolutionDeletionRaceMarket.id,
+            marketRevisionId:
+              resolutionDeletionRaceMarket.currentRevisionId,
+            result: "a",
+          }),
+          postAction(baseUrl, maker, {
+            type: "delete_market",
+            marketId: resolutionDeletionRaceMarket.id,
+          }),
+        ]);
+      assert.ok([200, 404, 409].includes(concurrentMarketResolution.status));
+      assert.equal(concurrentResolutionDeletion.status, 200);
+      assert.equal(
+        (await getState(baseUrl, maker)).markets.some(
+          (market) => market.id === resolutionDeletionRaceMarket.id,
+        ),
+        false,
+      );
 
       const deletionRaceMarket = await createMarket(
         baseUrl,
