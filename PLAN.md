@@ -2005,7 +2005,7 @@ Implementation:
   Browser inspection remains pending because no controllable browser backend
   was available in this session; bundle, responsive-style, and state semantics
   are covered by the automated regressions.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+- [x] Commit and push the exact verified source, deploy a saved Sites version,
   and verify the new shortcut and My live filter in the production bundle.
 
 Acceptance:
