@@ -1110,39 +1110,39 @@ Persistence and archive contract:
 
 Implementation:
 
-- [ ] Add failing parser tests for required reasons, exact accepted/rejected
+- [x] Add failing parser tests for required reasons, exact accepted/rejected
   decisions, IDs, length bounds, and the three new action variants.
-- [ ] Add a failing production D1 test covering participant authorization,
+- [x] Add a failing production D1 test covering participant authorization,
   public request visibility, reject, cancel, accept, repeat delivery, one
   pending request, no debt after agreement, and final-bet rejection.
-- [ ] Add production race regressions for accept-versus-reject,
+- [x] Add production race regressions for accept-versus-reject,
   mutual-void-versus-market-resolution, and mutual-void-versus-bet-revision
   acceptance, proving one final state and at most one debt.
-- [ ] Add `BetVoidRequestStatus`, state views, and action contracts in
+- [x] Add `BetVoidRequestStatus`, state views, and action contracts in
   `lib/contracts.ts` and strict untrusted-input parsing in
   `lib/action-parser.ts`.
-- [ ] Add `bet_void_requests` to `db/schema.ts` and runtime initialization in
+- [x] Add `bet_void_requests` to `db/schema.ts` and runtime initialization in
   `db/index.ts`; generate and inspect the next additive Drizzle migration.
-- [ ] Extend `lib/server.ts` state queries and mappings with full request
+- [x] Extend `lib/server.ts` state queries and mappings with full request
   history and server-derived capabilities for the current viewer.
-- [ ] Implement request, respond, cancel, supersession, idempotency, audit, and
+- [x] Implement request, respond, cancel, supersession, idempotency, audit, and
   structured conflict paths with conditional D1 batches and base-revision
   guards.
-- [ ] Update market settlement and bet-revision acceptance so either transition
+- [x] Update market settlement and bet-revision acceptance so either transition
   supersedes stale pending mutual-void requests without changing completed
   history.
-- [ ] Build the inline request form, pending decision panel, response controls,
+- [x] Build the inline request form, pending decision panel, response controls,
   accepted-void explanation, and append-only history in
   `app/BettingApp.tsx` and `app/globals.css`.
-- [ ] Extend the Notion export repository, canonical types, renderer, archive
+- [x] Extend the Notion export repository, canonical types, renderer, archive
   setup/reconciliation scripts, and unit tests with redacted `Void History`.
-- [ ] Update rendered-output and migration regressions plus `README.md`,
+- [x] Update rendered-output and migration regressions plus `README.md`,
   `CONTRIBUTING.md`, and archive documentation to explain mutual void versus
   deletion and the settled-bet boundary.
-- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect the
   generated SQL and packaged Worker for additive schema changes and no secrets.
-- [ ] Exercise separate maker, taker, and observer identities through request,
+- [x] Exercise separate maker, taker, and observer identities through request,
   reject, cancel, accept, stale revision, and resolution-race paths against the
   production-style D1 runtime.
 - [ ] Commit and push the exact verified source, deploy a saved Sites version,
@@ -1277,38 +1277,38 @@ Threat model:
 
 Implementation:
 
-- [ ] Add failing parser tests proving `delete_market` requires one bounded
+- [x] Add failing parser tests proving `delete_market` requires one bounded
   `marketId`, returns only typed action fields, and cannot be authorized by
   client-supplied ownership, force, or reference-count overrides.
-- [ ] Add failing production D1 tests for creator-only deletion across open,
+- [x] Add failing production D1 tests for creator-only deletion across open,
   resolved, void, and multi-revision unused markets, including full removal
   from every viewer's state.
-- [ ] Add production blockers for open, cancelled, expired, and accepted
+- [x] Add production blockers for open, cancelled, expired, and accepted
   offers plus pending, won, lost, and void matched bets, proving every
   historical reference preserves the market.
-- [ ] Add offer-creation-versus-deletion, edit-versus-deletion,
+- [x] Add offer-creation-versus-deletion, edit-versus-deletion,
   resolution-versus-deletion, and repeated-deletion race regressions proving
   one coherent result and no partial offer or orphaned revision.
-- [ ] Add the `DeleteMarketAction` contract and market deletion capability
+- [x] Add the `DeleteMarketAction` contract and market deletion capability
   fields in `lib/contracts.ts`, then parse the action in
   `lib/action-parser.ts`.
-- [ ] Extend `lib/server.ts` market-state queries with distinct offer and bet
+- [x] Extend `lib/server.ts` market-state queries with distinct offer and bet
   reference counts plus server-derived `canDelete` and blocker text.
-- [ ] Implement conditional creator-only revision and market deletion,
+- [x] Implement conditional creator-only revision and market deletion,
   structured `MARKET_IN_USE` handling, race-safe stale-offer handling, and the
   minimal `deleted_market` audit receipt.
-- [ ] Inspect D1 query plans for both reference checks; add only the missing
+- [x] Inspect D1 query plans for both reference checks; add only the missing
   additive index to `db/schema.ts`, `db/index.ts`, and a generated migration if
   the current indexes are insufficient.
-- [ ] Add the eligibility explanation and two-step destructive confirmation to
+- [x] Add the eligibility explanation and two-step destructive confirmation to
   `app/BettingApp.tsx`, with responsive styles in `app/globals.css`.
-- [ ] Update rendered-output regressions, `README.md`, `CONTRIBUTING.md`, and
+- [x] Update rendered-output regressions, `README.md`, `CONTRIBUTING.md`, and
   market documentation with the exact deletion boundary and conflict errors.
-- [ ] Run `npm run test:unit`, `npm test`, `npm run lint`,
+- [x] Run `npm run test:unit`, `npm test`, `npm run lint`,
   `npm run typecheck`, `npm run db:generate`, and `npm run build`; inspect any
   generated migration and the packaged Worker for destructive SQL, disabled
   foreign keys, or secrets.
-- [ ] Exercise creator, non-creator, and observer identities against eligible
+- [x] Exercise creator, non-creator, and observer identities against eligible
   and protected markets in the production-style D1 runtime.
 - [ ] Commit and push the exact verified source, deploy a saved Sites version,
   and verify successful deletion plus every protected-state conflict on the
