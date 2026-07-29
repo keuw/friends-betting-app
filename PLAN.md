@@ -1145,7 +1145,7 @@ Implementation:
 - [x] Exercise separate maker, taker, and observer identities through request,
   reject, cancel, accept, stale revision, and resolution-race paths against the
   production-style D1 runtime.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+- [x] Commit and push the exact verified source, deploy a saved Sites version,
   reconcile the Notion property and affected records, and verify the live app
   and Worker logs.
 
@@ -1310,7 +1310,7 @@ Implementation:
   foreign keys, or secrets.
 - [x] Exercise creator, non-creator, and observer identities against eligible
   and protected markets in the production-style D1 runtime.
-- [ ] Commit and push the exact verified source, deploy a saved Sites version,
+- [x] Commit and push the exact verified source, deploy a saved Sites version,
   and verify successful deletion plus every protected-state conflict on the
   live app without changing the Notion archive.
 
