@@ -42,6 +42,7 @@ import {
   type MarketLedgerFilter,
   type MarketLifecycle,
 } from "@/lib/market-ledger";
+import { defaultMarketCloseDate } from "@/lib/market-deadline";
 
 type Tab = "board" | "bets" | "settle" | "markets";
 
@@ -2347,7 +2348,8 @@ function MarketsTab({
         <h2>Create a market</h2>
         <p className="form-note">
           Market creators can place offers too. You still resolve the result,
-          and every action stays public to the group.
+          and every action stays public to the group. The closing date starts
+          three months from now.
         </p>
         <label>
           <span>The question</span>
@@ -2732,8 +2734,8 @@ function MarketEditForm({
   const [description, setDescription] = useState(revision.description);
   const [selectionA, setSelectionA] = useState(revision.selectionA);
   const [selectionB, setSelectionB] = useState(revision.selectionB);
-  const [closesAt, setClosesAt] = useState(
-    toDateTimeInput(revision.closesAt),
+  const [closesAt, setClosesAt] = useState(() =>
+    defaultCloseTime(revision.closesAt),
   );
   const [changeNote, setChangeNote] = useState("");
   const proposedCloseMs = new Date(closesAt).getTime();
@@ -2779,7 +2781,9 @@ function MarketEditForm({
       </div>
       <p>
         This creates a new version. The deadline may stay the same or move
-        later, never earlier. Matched bets always keep their accepted version.
+        later, never earlier. The editor starts at least three months from now,
+        unless this market already closes later. Matched bets always keep their
+        accepted version.
       </p>
       <label>
         <span>The question</span>
@@ -2928,7 +2932,8 @@ function MarketReopenForm({
       </div>
       <p>
         Betting closed {dateTime(revision.closesAt)}. Choose a new future
-        deadline; the question, context, and outcomes cannot change here.
+        deadline; the question, context, and outcomes cannot change here. The
+        new deadline starts three months from now.
       </p>
       <div className="market-reopen-warning">
         <strong>Expired offers stay expired.</strong>
@@ -3398,10 +3403,11 @@ function timestampDate(value: string): Date {
   return new Date(normalized);
 }
 
-function defaultCloseTime(): string {
-  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+function defaultCloseTime(minimumClose?: string): string {
+  const minimum = minimumClose ? new Date(minimumClose) : undefined;
+  return toDateTimeInput(
+    defaultMarketCloseDate(new Date(), minimum).toISOString(),
+  );
 }
 
 function toDateTimeInput(value: string): string {

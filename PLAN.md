@@ -2185,6 +2185,52 @@ Acceptance:
 - Stale and concurrent requests cannot partially update a market, offer,
   counteroffer, parlay, or matched bet.
 
+### Phase 23 — Default market deadlines to three months
+
+Make longer-lived markets the default without weakening the existing rule that
+an open market's deadline can never move backward.
+
+Behavior contract:
+
+- A new market's `Betting closes` field defaults to three calendar months from
+  the moment the form opens and resets to the same rolling default after a
+  successful submission.
+- A closed market's `New betting deadline` field defaults to three calendar
+  months from the moment its reopen panel opens.
+- An open market's edit form defaults to the later of its current deadline or
+  three calendar months from the moment the editor opens. This preselects a
+  useful extension without ever shortening a market that already closes later.
+- The calculation uses calendar months in the viewer's local time and safely
+  clamps month-end dates, rather than treating three months as a fixed 90-day
+  duration.
+- Users may still choose any valid date allowed by the current create, edit,
+  and reopen rules. This phase changes defaults only; server validation,
+  revisions, offers, matched bets, and stored data remain unchanged.
+
+Implementation:
+
+- [x] Add focused unit coverage for the three-calendar-month calculation,
+  month-end behavior, and the later-existing-deadline guard.
+- [x] Replace the one-day UI helper with the tested three-month helper and use
+  it for new-market creation and closed-market reopening.
+- [x] Prefill open-market editing with the later of its existing deadline or
+  the three-month default while retaining the existing minimum and warning
+  behavior.
+- [x] Add rendered-build regression coverage for all three entry points.
+- [x] Run unit, full built/integration, lint, type, schema-generation, and
+  production-build gates.
+- [ ] Commit and push the verified source, publish a new Sites version, and
+  verify the live endpoint and production assets.
+
+Acceptance:
+
+- Opening the create-market or reopen-market form shows a local deadline three
+  calendar months ahead instead of one day ahead.
+- Opening an open market's editor shows at least three calendar months ahead,
+  unless its existing deadline is already later.
+- No default can shorten an existing deadline, and all current authorization,
+  revision-history, expiry, and race-safety behavior remains intact.
+
 ## Required verification
 
 ```text

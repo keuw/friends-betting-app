@@ -248,6 +248,14 @@ test("market creators can extend open deadlines and reopen closed markets safely
   assert.match(migrations, /original_market_revision_id/);
 });
 
+test("market deadline forms default to three months without shortening", async () => {
+  const clientBundle = await readClientBundle();
+
+  assert.match(clientBundle, /closing date starts/);
+  assert.match(clientBundle, /editor starts at least three months/);
+  assert.match(clientBundle, /new deadline starts three months/);
+});
+
 test("the score strip opens the signed-in user's live matched bets", async () => {
   const [clientBundle, clientStyles] = await Promise.all([
     readClientBundle(),
