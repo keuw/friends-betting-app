@@ -2219,7 +2219,7 @@ Implementation:
 - [x] Add rendered-build regression coverage for all three entry points.
 - [x] Run unit, full built/integration, lint, type, schema-generation, and
   production-build gates.
-- [ ] Commit and push the verified source, publish a new Sites version, and
+- [x] Commit and push the verified source, publish a new Sites version, and
   verify the live endpoint and production assets.
 
 Acceptance:
