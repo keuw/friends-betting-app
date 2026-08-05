@@ -2298,7 +2298,7 @@ Implementation:
   permission boundary without publishing account emails.
 - [x] Run unit, full built/D1 integration, lint, type, schema-generation, and
   production-build gates, including stale/race regression coverage.
-- [ ] Commit and push the verified source, set the hosted admin allowlist,
+- [x] Commit and push the verified source, set the hosted admin allowlist,
   publish a new Sites version, and verify Tony's live admin-capable bundle and
   production endpoint.
 
