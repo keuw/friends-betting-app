@@ -272,6 +272,26 @@ test("configured admins receive attributed market controls without owner deletio
   assert.match(serverBundle, /Only the market creator can delete it/);
 });
 
+test("admins can auditably unresolve markets with accounting warnings", async () => {
+  const [serverBundle, clientBundle, clientStyles] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readClientStyles(),
+  ]);
+
+  assert.match(serverBundle, /unresolve_market/);
+  assert.match(serverBundle, /unresolved_market_revision/);
+  assert.match(serverBundle, /ADMIN_REQUIRED/);
+  assert.match(serverBundle, /MARKET_UNRESOLVE_STALE/);
+  assert.match(clientBundle, /Unresolve market v/);
+  assert.match(clientBundle, /Correction reason/);
+  assert.match(clientBundle, /Confirmed offline payments stay recorded/);
+  assert.match(clientBundle, /Expired offers and counteroffers stay closed/);
+  assert.match(clientBundle, /Result history/);
+  assert.match(clientStyles, /\.market-unresolve-panel/);
+  assert.match(clientStyles, /\.market-resolution-events/);
+});
+
 test("the score strip opens the signed-in user's live matched bets", async () => {
   const [clientBundle, clientStyles] = await Promise.all([
     readClientBundle(),

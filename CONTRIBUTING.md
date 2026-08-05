@@ -51,8 +51,8 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
   exactly one wins; declining leaves the root offer open.
 - Market creators may participate in offers on markets they resolve. A hosted
   exact-email allowlist may also grant an admin authority to edit, reopen,
-  resolve, or void markets; every such action stays attributed in public
-  revision and activity history.
+  resolve, void, or unresolve markets; every such action stays attributed in
+  public revision and activity history.
 - Market and matched-bet terms are append-only. Never update a revision in
   place. The only permitted existing-offer revision advance is an atomic,
   creator-authored deadline-only extension while the offer and all of its legs
@@ -81,7 +81,15 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
   participant accepts it, and both current and proposed legs must still be
   open. Admin status never bypasses permanent-delete ownership or mutual
   approval rules.
-- Market resolution creates an immutable debt record.
+- Only a configured admin may unresolve a final market revision. Treat the
+  correction as one atomic accounting operation: record the prior result and
+  required reason, reset and regrade every affected non-mutually-voided bet,
+  remove and rebuild its derived debt, and cancel pending offline-settlement
+  proposals for changed pairs. Never revive expired offers, change the close
+  date, reopen a mutually voided bet, or delete a confirmed offline payment.
+- Market resolution creates one unique debt derived from the matched bet.
+  Admin unresolve is the only flow allowed to remove that debt, and it must
+  immediately regrade the bet from its frozen revision legs.
 - Offline payment claims require confirmation from the other party.
 - The app never holds, transfers, or verifies money.
 - The weekly Notion archive is a human-readable matched-bet ledger, not a

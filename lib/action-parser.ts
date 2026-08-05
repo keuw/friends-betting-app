@@ -108,6 +108,25 @@ export function parseAppAction(input: unknown): AppAction {
         result,
       };
     }
+    case "unresolve_market": {
+      const reason = requiredString(record.reason, "reason");
+      if (reason.length < 3 || reason.length > 200) {
+        throw new AppError(
+          400,
+          "INVALID_UNRESOLVE_REASON",
+          "Reason must be between 3 and 200 characters.",
+        );
+      }
+      return {
+        type,
+        marketId: requiredId(record.marketId, "marketId"),
+        marketRevisionId: requiredId(
+          record.marketRevisionId,
+          "marketRevisionId",
+        ),
+        reason,
+      };
+    }
     case "propose_bet_revision":
       return {
         type,

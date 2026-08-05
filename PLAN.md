@@ -2315,6 +2315,101 @@ Acceptance:
   remains subject to the same revision, lifecycle, finality, and concurrency
   checks as a creator action.
 
+### Phase 25 — Allow admins to unresolve markets safely
+
+Let an administrator correct an incorrect market result without leaving
+matched bets, debts, or offline-payment history inconsistent with the market.
+
+Authorization and lifecycle contract:
+
+- Only a server-derived admin may unresolve a market revision. Market creators
+  who are not admins remain unable to reverse a final result.
+- Admins may unresolve either a resolved or voided revision, including a
+  historical revision still referenced by an existing offer or matched bet.
+- Unresolving clears that revision's winner and resolution timestamp and returns
+  it to unresolved `open` status. When it is the current revision, the market's
+  mirrored final status is cleared as part of the same operation.
+- Unresolving is not reopening. The original close date is unchanged, an
+  already-past deadline remains closed to new offers, and previously expired
+  offers or superseded counteroffers are never resurrected.
+- A non-empty correction reason is required. Public history records the admin,
+  reason, previous result, affected revision, and reversal time.
+
+Bet and accounting correction contract:
+
+- Every non-mutually-voided matched bet whose current bet revision references
+  the changed market revision is regraded from its frozen legs. Existing debt
+  derived from each affected bet is removed before that bet is reset and
+  regraded.
+- Regrading may leave a parlay final when another leg already determines the
+  outcome; otherwise the bet returns to pending until every required result is
+  known. Any still-final bet receives exactly one freshly derived debt entry.
+- A bet voided through the existing two-party mutual-void flow stays voided and
+  is never reopened by an admin's market correction.
+- Confirmed offline payments are immutable historical facts and are never
+  deleted or rewritten. If removing an incorrect bet debt means the prior
+  payment now exceeds the corrected obligation, the normal pair ledger may show
+  a balance in the opposite direction until the market is resolved correctly or
+  friends settle the difference offline.
+- Pending offline-settlement proposals for an affected friend pair are
+  cancelled because their amount was proposed against a stale balance.
+  Confirmed, rejected, and already-cancelled payment records remain unchanged.
+
+Interface and safety contract:
+
+- Final revision panels expose an `Unresolve` control only when the signed-in
+  viewer's server-derived `canUnresolve` capability is true.
+- The confirmation panel explains that matched bets and balances will be
+  recalculated, confirmed offline payments will remain, offers will not be
+  restored, and the original close date will remain in force. It includes an
+  aligned required reason field and explicit cancel/confirm actions.
+- The server remains authoritative if a caller submits a hidden or forged
+  action. The revision update, bet resets, debt removal, pending-payment
+  cancellation, and audit event must succeed as one race-safe correction.
+- Duplicate or stale unresolve requests fail without partially changing the
+  market, bets, debts, settlement proposals, or audit history.
+
+Implementation:
+
+- [x] Add failing parser and authorization tests for the admin-only
+  `unresolve_market` action, required bounded reason, final-revision guard, and
+  server-derived `canUnresolve` capability.
+- [x] Add failing built/D1 accounting tests for resolved and voided current and
+  historical revisions, single bets, back and house parlays, mutually voided
+  bets, confirmed offline payments, and pending settlement proposals.
+- [x] Implement one authoritative unresolve workflow that conditionally clears
+  the target revision, clears the current market mirror when applicable,
+  resets eligible affected bets, removes their derived debts, cancels stale
+  pending settlements, and writes a detailed audit event.
+- [x] Regrade the reset bets from their frozen bet-revision legs so already
+  decisive parlays settle again exactly once while newly incomplete bets remain
+  pending and debt uniqueness is preserved.
+- [x] Add the admin-only confirmation UI, public correction-history copy, and
+  clear post-action messaging without exposing admin allowlist data.
+- [x] Update `README.md`, `CONTRIBUTING.md`, `DESIGN.md`, and admin-operation
+  documentation with reversal permissions, accounting behavior, and the
+  immutable confirmed-payment rule.
+- [x] Run unit, full built/D1 integration, lint, type, schema-generation, and
+  production-build gates, including duplicate-unresolve and
+  resolve-versus-unresolve race coverage.
+- [ ] Commit and push the verified source, publish a new Sites version, and
+  verify the live admin reversal controls, production endpoint, and deployed
+  asset provenance.
+
+Acceptance:
+
+- An admin can unresolve an incorrect resolved or voided market revision while
+  an ordinary creator or friend receives a server-side authorization error.
+- The market becomes unresolved without changing its terms or close date and
+  without reviving any old offer or counteroffer.
+- Every eligible affected bet and debt agrees with the newly unresolved market;
+  mutually voided bets remain final and decisive parlays are regraded correctly.
+- Confirmed offline payments remain visible and continue contributing to the
+  pair balance, while pending proposals based on the old balance are cancelled.
+- Public history makes the correction and its reason attributable to the admin,
+  and concurrent or repeated requests cannot create partial state or duplicate
+  debts.
+
 ## Required verification
 
 ```text

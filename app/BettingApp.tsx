@@ -134,6 +134,7 @@ export function BettingApp({
             errorCode === "COUNTER_STALE" ||
             errorCode === "MARKET_IN_USE" ||
             errorCode === "MARKET_CHANGED" ||
+            errorCode === "MARKET_UNRESOLVE_STALE" ||
             errorCode === "BET_VOID_STALE" ||
             errorCode === "BET_REVISION_STALE"
           ) {
@@ -2707,6 +2708,15 @@ function MarketCard({
         />
       )}
 
+      {currentRevision?.canUnresolve && (
+        <MarketRevisionUnresolveActions
+          marketId={market.id}
+          revision={currentRevision}
+          busy={busy}
+          onAction={onAction}
+        />
+      )}
+
       {showHistory && (
         <MarketRevisionHistory
           market={market}
@@ -3015,8 +3025,17 @@ function MarketRevisionHistory({
               {revision.editorName} · {relativeTime(revision.createdAt)}
             </small>
             <MarketRevisionDiff revision={revision} previous={previous} />
+            <MarketResolutionEvents revision={revision} />
             {revision.canResolve && !revision.isCurrent && (
               <MarketRevisionResolveActions
+                marketId={market.id}
+                revision={revision}
+                busy={busy}
+                onAction={onAction}
+              />
+            )}
+            {revision.canUnresolve && !revision.isCurrent && (
+              <MarketRevisionUnresolveActions
                 marketId={market.id}
                 revision={revision}
                 busy={busy}
@@ -3151,6 +3170,153 @@ function MarketRevisionResolveActions({
       >
         Void
       </button>
+    </div>
+  );
+}
+
+function MarketRevisionUnresolveActions({
+  marketId,
+  revision,
+  busy,
+  onAction,
+}: {
+  marketId: string;
+  revision: MarketRevisionView;
+  busy: string | null;
+  onAction: (action: AppAction, message: string) => Promise<void>;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [reason, setReason] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await onAction(
+      {
+        type: "unresolve_market",
+        marketId,
+        marketRevisionId: revision.id,
+        reason,
+      },
+      `Market v${revision.revisionNumber} returned to unresolved. Matched bets and balances were recalculated.`,
+    );
+    setReason("");
+    setArmed(false);
+  }
+
+  if (!armed) {
+    return (
+      <div className="market-unresolve-actions">
+        <span>Admin result correction</span>
+        <button
+          type="button"
+          className="button-quiet danger"
+          disabled={busy !== null}
+          aria-expanded={false}
+          onClick={() => setArmed(true)}
+        >
+          Unresolve market v{revision.revisionNumber}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="market-unresolve-panel"
+      aria-label={`Unresolve market version ${revision.revisionNumber}`}
+      onSubmit={submit}
+    >
+      <div className="market-unresolve-head">
+        <div>
+          <span>ADMIN CORRECTION</span>
+          <strong>Return market v{revision.revisionNumber} to unresolved?</strong>
+        </div>
+        <StatusBadge status={revision.status} />
+      </div>
+      <p>
+        Matched bets and balances using this exact market version will be
+        recalculated. Mutually voided bets remain voided.
+      </p>
+      <div className="market-unresolve-warning">
+        <strong>Confirmed offline payments stay recorded.</strong>
+        <span>
+          A prior payment may temporarily reverse who owes whom until this
+          market is resolved correctly or friends settle the difference.
+        </span>
+        <strong>Expired offers and counteroffers stay closed.</strong>
+        <span>
+          The original betting deadline remains in force. This action corrects
+          the result; it does not extend or reopen betting.
+        </span>
+      </div>
+      <label>
+        <span>Correction reason</span>
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Explain what was wrong with the recorded result."
+          minLength={3}
+          maxLength={200}
+          required
+        />
+        <small>{reason.trim().length}/200 characters</small>
+      </label>
+      <div className="market-unresolve-buttons">
+        <button
+          type="submit"
+          className="button-dark danger-confirm"
+          disabled={busy !== null || reason.trim().length < 3}
+        >
+          Confirm unresolve
+        </button>
+        <button
+          type="button"
+          className="button-quiet"
+          disabled={busy !== null}
+          onClick={() => {
+            setReason("");
+            setArmed(false);
+          }}
+        >
+          Keep result
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MarketResolutionEvents({
+  revision,
+}: {
+  revision: MarketRevisionView;
+}) {
+  if (revision.resolutionEvents.length === 0) return null;
+
+  return (
+    <div className="market-resolution-events">
+      <span>Result history</span>
+      {revision.resolutionEvents.map((event) => {
+        const resultLabel =
+          event.result === "a"
+            ? revision.selectionA
+            : event.result === "b"
+              ? revision.selectionB
+              : event.result === "void"
+                ? "Void"
+                : "Unknown result";
+        return (
+          <div key={event.id}>
+            <p>
+              <strong>{event.actorName}</strong>{" "}
+              {event.action === "resolved"
+                ? `recorded ${resultLabel}`
+                : `removed ${resultLabel}`}
+            </p>
+            {event.reason && <q>{event.reason}</q>}
+            <small>{dateTime(event.createdAt)}</small>
+          </div>
+        );
+      })}
     </div>
   );
 }

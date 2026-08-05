@@ -88,6 +88,11 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
   Admins see the existing edit, reopen, and resolution controls on friends'
   markets; ownership labels and permanent-delete controls must remain tied to
   the actual creator.
+- A final market revision gives admins a coral-tinted `Unresolve` disclosure,
+  not an easy one-click reversal. Its confirmation panel requires a reason and
+  explains bet regrading, balance changes, permanent confirmed-payment history,
+  unchanged deadlines, and non-restored offers. Each revision's Result history
+  shows who recorded and removed outcomes, when, and why.
 - When a deadline-only extension advances an open offer, its leg shows both the
   original market revision and the new effective deadline. This exception is
   explicit rather than silently presenting the offer as newly posted.

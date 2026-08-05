@@ -68,6 +68,17 @@ export type MarketRevisionView = {
   resolvedAt: string | null;
   isCurrent: boolean;
   canResolve: boolean;
+  canUnresolve: boolean;
+  resolutionEvents: MarketResolutionEventView[];
+};
+
+export type MarketResolutionEventView = {
+  id: string;
+  actorName: string;
+  action: "resolved" | "unresolved";
+  result: Selection | "void" | null;
+  reason: string | null;
+  createdAt: string;
 };
 
 export type OfferLegView = {
@@ -286,6 +297,13 @@ export type ResolveMarketAction = {
   result: Selection | "void";
 };
 
+export type UnresolveMarketAction = {
+  type: "unresolve_market";
+  marketId: string;
+  marketRevisionId: string;
+  reason: string;
+};
+
 export type ProposeBetRevisionAction = {
   type: "propose_bet_revision";
   betId: string;
@@ -351,6 +369,7 @@ export type AppAction =
   | DeclineCounterofferAction
   | CancelOfferAction
   | ResolveMarketAction
+  | UnresolveMarketAction
   | ProposeBetRevisionAction
   | RespondBetRevisionAction
   | CancelBetRevisionAction

@@ -27,8 +27,8 @@ external method, both parties confirm the settlement in Sidebet.
   accepted by the other participant.
 - The market creator acts as its resolver and may also make, counter, or accept
   offers on that market. Securely configured admins may edit, reopen, resolve,
-  or void any market, and every admin action remains attributed in public
-  history.
+  void, or unresolve any market revision, and every admin action remains
+  attributed in public history.
 - A betting close is not a result. Before the displayed deadline, a market is
   `Open for offers`; afterward it is `Closed · awaiting result` until its
   creator resolves or voids it. Every displayed close time includes the year,
@@ -43,12 +43,18 @@ external method, both parties confirm the settlement in Sidebet.
   its creator or an admin may reopen it with a new future deadline and reason.
   Reopening cannot change the question or outcomes, revive expired offers, or
   reopen a resolved or voided market.
+- An admin may return an incorrect resolved or voided revision to unresolved
+  with a public correction reason. Sidebet regrades every affected matched bet,
+  removes or rebuilds its derived debt, and cancels pending payment proposals
+  based on the stale balance. Confirmed offline payments and mutually voided
+  bets remain permanent history. The original close date and expired offers do
+  not change.
 - Either participant may propose new terms for a pending matched bet. The
   current version remains active unless the other participant accepts the
   complete proposal; rejected and cancelled proposals stay in the public
   history without changing the bet.
-- Settled bets create pairwise debts. Reciprocal debts are netted before the app
-  shows who owes whom.
+- Settled bets create pairwise debts. Reciprocal debts and confirmed offline
+  payments are netted before the app shows who owes whom.
 - Offline settlement proposals require confirmation from the other party.
 
 See [PLAN.md](./PLAN.md) for the full domain model, race-condition contract, and

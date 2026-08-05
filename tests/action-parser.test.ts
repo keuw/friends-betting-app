@@ -93,6 +93,50 @@ test("requires exact market revisions for resolution and revised legs", () => {
   );
 });
 
+test("parses bounded admin market-unresolve reasons", () => {
+  assert.deepEqual(
+    parseAppAction({
+      type: "unresolve_market",
+      marketId: "market-1",
+      marketRevisionId: "market-revision-2",
+      reason: "  The reported result used the wrong source.  ",
+    }),
+    {
+      type: "unresolve_market",
+      marketId: "market-1",
+      marketRevisionId: "market-revision-2",
+      reason: "The reported result used the wrong source.",
+    },
+  );
+
+  for (const reason of ["no", "x".repeat(201)]) {
+    assert.throws(
+      () =>
+        parseAppAction({
+          type: "unresolve_market",
+          marketId: "market-1",
+          marketRevisionId: "market-revision-2",
+          reason,
+        }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === "INVALID_UNRESOLVE_REASON",
+    );
+  }
+
+  assert.throws(
+    () =>
+      parseAppAction({
+        type: "unresolve_market",
+        marketId: "market-1",
+        reason: "The reported result used the wrong source.",
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.message === "marketRevisionId is required.",
+  );
+});
+
 test("accepts only explicit bet-revision decisions", () => {
   assert.throws(
     () =>

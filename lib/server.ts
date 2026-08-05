@@ -18,6 +18,7 @@ import type {
   AppState,
   BetRevisionStatus,
   BetStatus,
+  MarketResolutionEventView,
   MarketStatus,
   OfferStatus,
   ParlayPosition,
@@ -304,6 +305,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
     usersResult,
     marketsResult,
     marketRevisionsResult,
+    marketResolutionEventsResult,
     offersResult,
     legsResult,
     countersResult,
@@ -368,6 +370,17 @@ export async function getAppState(user: AppUser): Promise<AppState> {
        FROM market_revisions mr
        JOIN users editor ON editor.id = mr.editor_user_id
        ORDER BY mr.market_id, mr.revision_number DESC`,
+    ),
+    db.prepare(
+      `SELECT a.*, u.display_name AS actor_name
+       FROM audit_events a
+       JOIN users u ON u.id = a.actor_user_id
+       WHERE a.entity_type = 'market_revision'
+         AND a.action IN (
+           'resolved_market_revision',
+           'unresolved_market_revision'
+         )
+       ORDER BY datetime(a.created_at) ASC, a.rowid ASC`,
     ),
     db.prepare(
       `SELECT o.*, u.display_name AS maker_name
@@ -468,7 +481,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
       `SELECT a.*, u.display_name AS actor_name
        FROM audit_events a
        JOIN users u ON u.id = a.actor_user_id
-       ORDER BY datetime(a.created_at) DESC
+       ORDER BY datetime(a.created_at) DESC, a.rowid DESC
        LIMIT 40`,
     ),
   ]);
@@ -477,6 +490,9 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   const userNames = new Map(users.map((row) => [row.id, row.display_name]));
   const marketRows = rows<MarketRow>(marketsResult);
   const marketRevisionRows = rows<MarketRevisionRow>(marketRevisionsResult);
+  const marketResolutionEventRows = rows<AuditRow>(
+    marketResolutionEventsResult,
+  );
   const offerRows = rows<OfferRow>(offersResult);
   const legRows = rows<OfferLegRow>(legsResult);
   const counterRows = rows<CounterRow>(countersResult);
@@ -494,6 +510,10 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   const revisionsByMarket = groupBy(
     marketRevisionRows,
     (row) => row.market_id,
+  );
+  const resolutionEventsByRevision = groupBy(
+    marketResolutionEventRows,
+    (row) => row.entity_id,
   );
   const revisionsByBet = groupBy(betRevisionRows, (row) => row.bet_id);
   const legsByBetRevision = groupBy(
@@ -571,24 +591,29 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         betReferenceCount: market.bet_reference_count,
         canDelete,
         deletionBlocker,
-        revisions: (revisionsByMarket.get(market.id) ?? []).map((revision) => ({
-        id: revision.id,
-        revisionNumber: revision.revision_number,
-        question: revision.question,
-        description: revision.description,
-        selectionA: revision.selection_a,
-        selectionB: revision.selection_b,
-        closesAt: revision.closes_at,
-        status: revision.status,
-        winningSelection: revision.winning_selection,
-        editorName: revision.editor_name,
-        changeNote: revision.change_note,
-        createdAt: revision.created_at,
-        resolvedAt: revision.resolved_at,
-        isCurrent: revision.id === market.current_revision_id,
-        canResolve:
-          canManage && revision.status === "open",
-        })),
+        revisions: (revisionsByMarket.get(market.id) ?? []).map(
+          (revision) => ({
+            id: revision.id,
+            revisionNumber: revision.revision_number,
+            question: revision.question,
+            description: revision.description,
+            selectionA: revision.selection_a,
+            selectionB: revision.selection_b,
+            closesAt: revision.closes_at,
+            status: revision.status,
+            winningSelection: revision.winning_selection,
+            editorName: revision.editor_name,
+            changeNote: revision.change_note,
+            createdAt: revision.created_at,
+            resolvedAt: revision.resolved_at,
+            isCurrent: revision.id === market.current_revision_id,
+            canResolve: canManage && revision.status === "open",
+            canUnresolve: user.isAdmin && revision.status !== "open",
+            resolutionEvents: (
+              resolutionEventsByRevision.get(revision.id) ?? []
+            ).map(toMarketResolutionEventView),
+          }),
+        ),
       };
     }),
     offers: offerRows.map((offer) => ({
@@ -781,6 +806,14 @@ export async function performAction(
         action.marketId,
         action.marketRevisionId,
         action.result,
+      );
+      return;
+    case "unresolve_market":
+      await unresolveMarket(
+        user,
+        action.marketId,
+        action.marketRevisionId,
+        action.reason,
       );
       return;
     case "propose_bet_revision":
@@ -2339,6 +2372,178 @@ async function resolveMarket(
   await settlePendingBets();
 }
 
+async function unresolveMarket(
+  user: AppUser,
+  marketId: string,
+  marketRevisionId: string,
+  rawReason: string,
+): Promise<void> {
+  const reason = boundedText(rawReason, "Reason", 3, 200);
+  if (!user.isAdmin) {
+    throw new AppError(
+      403,
+      "ADMIN_REQUIRED",
+      "Only an admin can unresolve a market.",
+    );
+  }
+
+  const db = getD1();
+  const revision = await first<{
+    id: string;
+    status: MarketStatus;
+  }>(
+    db
+      .prepare(
+        `SELECT mr.id, mr.status
+         FROM market_revisions mr
+         JOIN markets m ON m.id = mr.market_id
+         WHERE m.id = ? AND mr.id = ?`,
+      )
+      .bind(marketId, marketRevisionId),
+  );
+  if (!revision) {
+    throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
+  }
+  if (revision.status === "open") {
+    throw new AppError(
+      409,
+      "MARKET_UNRESOLVE_STALE",
+      "This market revision is already unresolved.",
+    );
+  }
+
+  const operationId = crypto.randomUUID();
+  const results = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO audit_events
+          (id, actor_user_id, action, entity_type, entity_id, metadata_json)
+         SELECT ?, ?, 'unresolved_market_revision', 'market_revision', mr.id,
+                json_object(
+                  'marketId', m.id,
+                  'reason', ?,
+                  'previousStatus', mr.status,
+                  'previousResult', mr.winning_selection
+                )
+         FROM market_revisions mr
+         JOIN markets m ON m.id = mr.market_id
+         WHERE m.id = ?
+           AND mr.id = ?
+           AND mr.status IN ('resolved', 'void')`,
+      )
+      .bind(operationId, user.id, reason, marketId, marketRevisionId),
+    db
+      .prepare(
+        `UPDATE offline_settlements
+         SET status = 'cancelled', responded_at = CURRENT_TIMESTAMP
+         WHERE status = 'pending'
+           AND EXISTS (
+             SELECT 1 FROM audit_events WHERE id = ?
+           )
+           AND EXISTS (
+             SELECT 1
+             FROM debts d
+             JOIN bets b ON b.id = d.bet_id
+             JOIN bet_revision_legs brl
+               ON brl.bet_revision_id = b.current_revision_id
+             WHERE brl.market_revision_id = ?
+               AND b.status IN ('maker_won', 'taker_won')
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM bet_void_requests vr
+                 WHERE vr.bet_id = b.id AND vr.status = 'accepted'
+               )
+               AND (
+                 (
+                   offline_settlements.debtor_user_id = b.maker_user_id
+                   AND offline_settlements.creditor_user_id = b.taker_user_id
+                 )
+                 OR (
+                   offline_settlements.debtor_user_id = b.taker_user_id
+                   AND offline_settlements.creditor_user_id = b.maker_user_id
+                 )
+               )
+           )`,
+      )
+      .bind(operationId, marketRevisionId),
+    db
+      .prepare(
+        `DELETE FROM debts
+         WHERE EXISTS (
+           SELECT 1 FROM audit_events WHERE id = ?
+         )
+           AND bet_id IN (
+             SELECT b.id
+             FROM bets b
+             JOIN bet_revision_legs brl
+               ON brl.bet_revision_id = b.current_revision_id
+             WHERE brl.market_revision_id = ?
+               AND b.status IN ('maker_won', 'taker_won', 'void')
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM bet_void_requests vr
+                 WHERE vr.bet_id = b.id AND vr.status = 'accepted'
+               )
+           )`,
+      )
+      .bind(operationId, marketRevisionId),
+    db
+      .prepare(
+        `UPDATE bets
+         SET status = 'pending', settled_at = NULL
+         WHERE status IN ('maker_won', 'taker_won', 'void')
+           AND EXISTS (
+             SELECT 1 FROM audit_events WHERE id = ?
+           )
+           AND EXISTS (
+             SELECT 1
+             FROM bet_revision_legs brl
+             WHERE brl.bet_revision_id = bets.current_revision_id
+               AND brl.market_revision_id = ?
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM bet_void_requests vr
+             WHERE vr.bet_id = bets.id AND vr.status = 'accepted'
+           )`,
+      )
+      .bind(operationId, marketRevisionId),
+    db
+      .prepare(
+        `UPDATE market_revisions
+         SET status = 'open', winning_selection = NULL, resolved_at = NULL
+         WHERE id = ?
+           AND market_id = ?
+           AND status IN ('resolved', 'void')
+           AND EXISTS (
+             SELECT 1 FROM audit_events WHERE id = ?
+           )`,
+      )
+      .bind(marketRevisionId, marketId, operationId),
+    db
+      .prepare(
+        `UPDATE markets
+         SET status = 'open', winning_selection = NULL, resolved_at = NULL
+         WHERE id = ?
+           AND current_revision_id = ?
+           AND EXISTS (
+             SELECT 1 FROM audit_events WHERE id = ?
+           )`,
+      )
+      .bind(marketId, marketRevisionId, operationId),
+  ]);
+
+  if (results[0].meta.changes !== 1 || results[4].meta.changes !== 1) {
+    throw new AppError(
+      409,
+      "MARKET_UNRESOLVE_STALE",
+      "Another market correction was recorded first.",
+    );
+  }
+
+  await settlePendingBets();
+}
+
 async function proposeBetRevision(
   user: AppUser,
   action: Extract<AppAction, { type: "propose_bet_revision" }>,
@@ -3814,6 +4019,34 @@ function boundedText(
     );
   }
   return trimmed;
+}
+
+function toMarketResolutionEventView(
+  row: AuditRow,
+): MarketResolutionEventView {
+  const metadata = safeJson(row.metadata_json);
+  const rawResult =
+    row.action === "resolved_market_revision"
+      ? metadata.result
+      : metadata.previousStatus === "void"
+        ? "void"
+        : metadata.previousResult;
+  const result: Selection | "void" | null =
+    rawResult === "a" || rawResult === "b" || rawResult === "void"
+      ? rawResult
+      : null;
+
+  return {
+    id: row.id,
+    actorName: row.actor_name,
+    action:
+      row.action === "unresolved_market_revision"
+        ? ("unresolved" as const)
+        : ("resolved" as const),
+    result,
+    reason: typeof metadata.reason === "string" ? metadata.reason : null,
+    createdAt: row.created_at,
+  };
 }
 
 function safeJson(value: string): Record<string, unknown> {
