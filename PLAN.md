@@ -2392,7 +2392,7 @@ Implementation:
 - [x] Run unit, full built/D1 integration, lint, type, schema-generation, and
   production-build gates, including duplicate-unresolve and
   resolve-versus-unresolve race coverage.
-- [ ] Commit and push the verified source, publish a new Sites version, and
+- [x] Commit and push the verified source, publish a new Sites version, and
   verify the live admin reversal controls, production endpoint, and deployed
   asset provenance.
 
