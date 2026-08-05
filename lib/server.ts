@@ -1,6 +1,8 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { ensureSchema, getD1 } from "@/db";
 import { AppError } from "@/lib/action-parser";
+import { isAdminEmail } from "@/lib/admin-authorization";
+import { env } from "cloudflare:workers";
 import {
   canAmendBet,
   derivePairBalances,
@@ -27,6 +29,7 @@ type AppUser = {
   id: string;
   email: string;
   displayName: string;
+  isAdmin: boolean;
 };
 
 type UserRow = {
@@ -284,6 +287,10 @@ export async function requireAppUser(): Promise<AppUser> {
     id: user.id,
     email: user.email,
     displayName: user.display_name,
+    isAdmin: isAdminEmail(
+      user.email,
+      env.ADMIN_EMAILS ?? process.env.ADMIN_EMAILS,
+    ),
   };
 }
 
@@ -515,9 +522,14 @@ export async function getAppState(user: AppUser): Promise<AppState> {
   );
 
   return {
-    viewer: { id: user.id, displayName: user.displayName },
+    viewer: {
+      id: user.id,
+      displayName: user.displayName,
+      isAdmin: user.isAdmin,
+    },
     markets: marketRows.map((market) => {
       const createdByMe = market.creator_user_id === user.id;
+      const canManage = createdByMe || user.isAdmin;
       const protectedOfferReferenceCount =
         market.offer_reference_count -
         market.removable_offer_reference_count;
@@ -546,6 +558,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         winningSelection: market.winning_selection,
         creatorName: market.creator_name,
         createdByMe,
+        canManage,
         createdAt: market.created_at,
         currentRevisionId: market.current_revision_id,
         revisionNumber: market.revision_number,
@@ -574,7 +587,7 @@ export async function getAppState(user: AppUser): Promise<AppState> {
         resolvedAt: revision.resolved_at,
         isCurrent: revision.id === market.current_revision_id,
         canResolve:
-          market.creator_user_id === user.id && revision.status === "open",
+          canManage && revision.status === "open",
         })),
       };
     }),
@@ -936,11 +949,11 @@ async function editMarket(
   if (!current) {
     throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
   }
-  if (current.creator_user_id !== user.id) {
+  if (current.creator_user_id !== user.id && !user.isAdmin) {
     throw new AppError(
       403,
       "NOT_MARKET_ORACLE",
-      "Only the market creator can edit it.",
+      "Only the market creator or an admin can edit it.",
     );
   }
   if (
@@ -1178,11 +1191,11 @@ async function reopenMarket(
   if (!current) {
     throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
   }
-  if (current.creator_user_id !== user.id) {
+  if (current.creator_user_id !== user.id && !user.isAdmin) {
     throw new AppError(
       403,
       "NOT_MARKET_ORACLE",
-      "Only the market creator can reopen it.",
+      "Only the market creator or an admin can reopen it.",
     );
   }
   if (
@@ -2233,11 +2246,11 @@ async function resolveMarket(
   if (!market) {
     throw new AppError(404, "MARKET_NOT_FOUND", "Market not found.");
   }
-  if (market.creator_user_id !== user.id) {
+  if (market.creator_user_id !== user.id && !user.isAdmin) {
     throw new AppError(
       403,
       "NOT_MARKET_ORACLE",
-      "Only the market creator can resolve it.",
+      "Only the market creator or an admin can resolve it.",
     );
   }
   if (market.revision_status !== "open") {

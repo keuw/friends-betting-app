@@ -256,6 +256,22 @@ test("market deadline forms default to three months without shortening", async (
   assert.match(clientBundle, /new deadline starts three months/);
 });
 
+test("configured admins receive attributed market controls without owner deletion", async () => {
+  const [serverBundle, clientBundle, clientStyles] = await Promise.all([
+    readFile(new URL("dist/server/index.js", root), "utf8"),
+    readClientBundle(),
+    readClientStyles(),
+  ]);
+
+  assert.match(serverBundle, /ADMIN_EMAILS/);
+  assert.match(serverBundle, /Only the market creator or an admin can edit it/);
+  assert.match(serverBundle, /Only the market creator or an admin can reopen it/);
+  assert.match(serverBundle, /Only the market creator or an admin can resolve it/);
+  assert.match(clientBundle, /Admin/);
+  assert.match(clientStyles, /\.admin-badge/);
+  assert.match(serverBundle, /Only the market creator can delete it/);
+});
+
 test("the score strip opens the signed-in user's live matched bets", async () => {
   const [clientBundle, clientStyles] = await Promise.all([
     readClientBundle(),

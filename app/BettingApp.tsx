@@ -193,7 +193,10 @@ export function BettingApp({
           </button>
           <div className="user-chip">
             <span className="avatar">{initials(viewer.displayName)}</span>
-            <span>{viewer.displayName}</span>
+            <span className="user-name">{viewer.displayName}</span>
+            {state?.viewer.isAdmin && (
+              <span className="admin-badge">Admin</span>
+            )}
           </div>
           <a className="sign-out" href={signOutPath}>
             Sign out
@@ -2521,11 +2524,9 @@ function MarketCard({
     market.revisions.find((revision) => revision.isCurrent) ??
     market.revisions[0];
   const lifecycle = getMarketLifecycle(market, nowMs);
-  const canEdit =
-    market.createdByMe &&
-    lifecycle === "open";
+  const canEdit = market.canManage && lifecycle === "open";
   const canReopen =
-    market.createdByMe &&
+    market.canManage &&
     lifecycle === "closed" &&
     currentRevision?.status === "open";
 

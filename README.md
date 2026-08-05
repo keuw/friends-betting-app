@@ -26,8 +26,9 @@ external method, both parties confirm the settlement in Sidebet.
   position. A matched-bet position can change only through a complete revision
   accepted by the other participant.
 - The market creator acts as its resolver and may also make, counter, or accept
-  offers on that market. Participation and resolution remain public to the
-  group.
+  offers on that market. Securely configured admins may edit, reopen, resolve,
+  or void any market, and every admin action remains attributed in public
+  history.
 - A betting close is not a result. Before the displayed deadline, a market is
   `Open for offers`; afterward it is `Closed · awaiting result` until its
   creator resolves or voids it. Every displayed close time includes the year,
@@ -37,11 +38,11 @@ external method, both parties confirm the settlement in Sidebet.
   while preserving the original version on each offer for public review. If
   any other term changes, existing offers keep their exact market version.
   Matched bets always keep their accepted version.
-- An open market’s creator may keep its deadline or move it later from
-  `Edit market`, but may not shorten it. After an unresolved market closes, its
-  creator may reopen it with a new future deadline and reason. Reopening cannot
-  change the question or outcomes, revive expired offers, or reopen a resolved
-  or voided market.
+- An open market’s creator or an admin may keep its deadline or move it later
+  from `Edit market`, but may not shorten it. After an unresolved market closes,
+  its creator or an admin may reopen it with a new future deadline and reason.
+  Reopening cannot change the question or outcomes, revive expired offers, or
+  reopen a resolved or voided market.
 - Either participant may propose new terms for a pending matched bet. The
   current version remains active unless the other participant accepts the
   complete proposal; rejected and cancelled proposals stay in the public
@@ -92,6 +93,11 @@ database. The schema lives in `db/schema.ts`; generated SQL migrations live in
 `drizzle/`.
 
 Production hosting is configured through `.openai/hosting.json`.
+
+Market administrators are configured through the hosted `ADMIN_EMAILS` secret,
+using exact comma-separated ChatGPT sign-in emails. See
+[docs/admin-access.md](./docs/admin-access.md) for the least-privilege boundary
+and local testing guidance. Never commit the production allowlist.
 
 ## Weekly Notion archive
 

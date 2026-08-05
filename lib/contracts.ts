@@ -24,6 +24,7 @@ export type SettlementStatus =
 export type Viewer = {
   id: string;
   displayName: string;
+  isAdmin: boolean;
 };
 
 export type MarketView = {
@@ -37,6 +38,7 @@ export type MarketView = {
   winningSelection: Selection | null;
   creatorName: string;
   createdByMe: boolean;
+  canManage: boolean;
   createdAt: string;
   currentRevisionId: string;
   revisionNumber: number;

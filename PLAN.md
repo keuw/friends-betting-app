@@ -2231,6 +2231,90 @@ Acceptance:
 - No default can shorten an existing deadline, and all current authorization,
   revision-history, expiry, and race-safety behavior remains intact.
 
+### Phase 24 — Add securely configured market administrators
+
+Grant selected signed-in accounts server-enforced authority to manage any
+market while preserving creator ownership, public attribution, and the current
+revision/race guarantees.
+
+Role and provisioning contract:
+
+- Admin identity is matched against an exact, normalized ChatGPT sign-in email
+  in a hosted `ADMIN_EMAILS` allowlist. The real allowlist value is configured
+  in Sites as a secret and is never committed to this public repository or
+  returned by an API.
+- The allowlist supports multiple comma-separated accounts so future admins can
+  be added without changing application code. Matching is case-insensitive,
+  whitespace-tolerant, and exact; display names and partial email matches never
+  grant authority.
+- The signed-in viewer and per-market state expose only boolean role/capability
+  flags. They do not expose email addresses or the configured allowlist.
+- Tony Kung's exact sign-in email is added to the hosted allowlist during this
+  phase's deployment so the existing account receives admin authority on its
+  next request.
+
+Admin capability contract:
+
+- An admin may edit any still-open market using the same append-only revision,
+  later-only deadline, offer-propagation, and optimistic-concurrency rules as
+  its creator.
+- An admin may reopen any closed unresolved market using the same deadline-only
+  flow as its creator. Resolved and voided markets remain final.
+- An admin may resolve or void any unresolved market revision, including a
+  revision associated with matched bets after the market was reopened. The
+  existing idempotent settlement and stale-resolution guards still apply.
+- Every admin edit, reopen, resolution, or void uses the admin's user ID in the
+  existing revision editor and audit event records so friends can see who acted.
+- Admin authority does not include permanent market deletion, offer ownership,
+  matched-bet amendment, mutual void approval, debt settlement confirmation,
+  or impersonation. Those rules remain unchanged.
+
+Interface contract:
+
+- Admin viewers receive a small `Admin` account badge.
+- Creator-only checks that currently hide `Edit market`, `Reopen market`, and
+  resolution controls instead use server-derived manage/resolve capabilities,
+  so admins see the same guarded controls on friends' markets.
+- Ownership remains visually accurate: a friend's market is not labeled as
+  created by the admin, and delete controls remain hidden unless the admin is
+  also the creator.
+- Unauthorized users continue to receive creator-or-admin server errors even
+  if they manually submit an action that the UI hides.
+
+Implementation:
+
+- [x] Add failing unit tests for exact normalized admin-email matching without
+  leaking configured values.
+- [x] Add failing built/D1 authorization tests proving an admin can edit,
+  reopen, resolve, and void another creator's markets while an ordinary friend
+  remains forbidden and deletion remains creator-only.
+- [x] Derive the admin role inside `requireAppUser`, thread boolean viewer and
+  market capabilities through the typed state contract, and keep every action
+  check authoritative on the server.
+- [x] Update the market controls and account header to use the new capabilities
+  while preserving ownership labels, history attribution, and existing
+  lifecycle restrictions.
+- [x] Document secure hosted admin configuration and the deliberately narrow
+  permission boundary without publishing account emails.
+- [x] Run unit, full built/D1 integration, lint, type, schema-generation, and
+  production-build gates, including stale/race regression coverage.
+- [ ] Commit and push the verified source, set the hosted admin allowlist,
+  publish a new Sites version, and verify Tony's live admin-capable bundle and
+  production endpoint.
+
+Acceptance:
+
+- Tony's exact signed-in account is recognized as an admin without committing
+  its email address or exposing it to other users.
+- Tony can edit an open market, reopen a closed unresolved market, and resolve
+  or void an unresolved revision created by another user.
+- Ordinary friends cannot perform those actions on markets they did not create,
+  and admins cannot delete another user's market or bypass unrelated mutual
+  approval flows.
+- Every successful admin action is attributable to Tony in public history and
+  remains subject to the same revision, lifecycle, finality, and concurrency
+  checks as a creator action.
+
 ## Required verification
 
 ```text

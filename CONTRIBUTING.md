@@ -49,8 +49,10 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - Only the current recipient may accept, counter, or decline a pending
   counteroffer. Those transitions must recheck the pending state atomically so
   exactly one wins; declining leaves the root offer open.
-- Market creators may participate in offers on markets they resolve; both the
-  participation and resolution stay visible in the public activity ledger.
+- Market creators may participate in offers on markets they resolve. A hosted
+  exact-email allowlist may also grant an admin authority to edit, reopen,
+  resolve, or void markets; every such action stays attributed in public
+  revision and activity history.
 - Market and matched-bet terms are append-only. Never update a revision in
   place. The only permitted existing-offer revision advance is an atomic,
   creator-authored deadline-only extension while the offer and all of its legs
@@ -59,8 +61,9 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
 - A market with `status = open` is offerable only before `closes_at`. After the
   deadline it is closed and awaiting a creator-recorded result; closing must
   never automatically resolve, void, or settle it.
-- Only the creator may reopen a closed unresolved market. Reopening creates a
-  deadline-only revision with a future close and audit reason. It must not
+- Only the creator or a configured admin may reopen a closed unresolved market.
+  Reopening creates a deadline-only revision with a future close and audit
+  reason. It must not
   revive expired offers or affect accepted offers, matched bets, resolved
   markets, or voided markets.
 - Either matched-bet participant may request a mutual void while the bet is
@@ -73,9 +76,11 @@ Read [PLAN.md](./PLAN.md) before changing betting behavior. In particular:
   all of its parlay legs, and its counteroffers must be removed atomically with
   append-only tombstone receipts. Never shorten a multi-market parlay, remove
   matched-bet history, or add a client-controlled force bypass.
-- Only the market creator may publish a new market revision. A pending
-  matched-bet revision becomes active only after the other participant accepts
-  it, and both current and proposed legs must still be open.
+- Only the market creator or a configured admin may publish a new market
+  revision. A pending matched-bet revision becomes active only after the other
+  participant accepts it, and both current and proposed legs must still be
+  open. Admin status never bypasses permanent-delete ownership or mutual
+  approval rules.
 - Market resolution creates an immutable debt record.
 - Offline payment claims require confirmation from the other party.
 - The app never holds, transfers, or verifies money.
@@ -96,6 +101,7 @@ Prefer small pull requests that change one workflow or concern. Avoid unrelated
 refactors, preserve existing tests, and add focused coverage when behavior
 changes.
 
-Never commit Notion tokens, export trigger secrets, local `.dev.vars`, D1
+Never commit admin email allowlists, Notion tokens, export trigger secrets,
+local `.dev.vars`, D1
 exports, or copied production responses. Public scheduler configuration may
 contain the endpoint URL and variable names only.

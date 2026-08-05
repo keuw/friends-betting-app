@@ -84,6 +84,10 @@ social, slightly irreverent, and trustworthy enough to settle an argument.
   the full terms editor. It keeps the question and outcomes visibly locked,
   shows the prior close time, requires a reason, and warns that expired offers
   stay expired.
+- An admin account uses a compact `Admin` badge in the signed-in user chip.
+  Admins see the existing edit, reopen, and resolution controls on friends'
+  markets; ownership labels and permanent-delete controls must remain tied to
+  the actual creator.
 - When a deadline-only extension advances an open offer, its leg shows both the
   original market revision and the new effective deadline. This exception is
   explicit rather than silently presenting the offer as newly posted.

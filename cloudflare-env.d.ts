@@ -6,5 +6,6 @@ declare namespace Cloudflare {
     NOTION_DATA_SOURCE_ID: string;
     NOTION_EXPORT_SECRET: string;
     SIDEBET_APP_URL: string;
+    ADMIN_EMAILS: string;
   }
 }
